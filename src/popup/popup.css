@@ -667,6 +667,15 @@ body.disconnected .disconnected-badge {
   align-items: center;
 }
 
+/* Position in the result set, next to the pager buttons. Reads as a label, not
+   as an action — and hides itself entirely when there's only one page. */
+.page-indicator {
+  font-size: 11px;
+  color: #71717a;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
 .tab-list {
   flex: 1;
   overflow-y: auto;

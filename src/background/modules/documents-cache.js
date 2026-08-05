@@ -16,12 +16,16 @@ import { browserStorage } from './browser-storage.js';
 // every mutation goes through one chain.
 let mutationQueue = Promise.resolve();
 
+// The mutator receives both halves — the shared document store and the per-path
+// indexes — and returns true if it changed either.
 function enqueue(mutator) {
   const run = async () => {
     try {
-      const cache = await browserStorage.getDocumentsCache();
-      const next = mutator(cache);
-      if (next) await browserStorage.setDocumentsCache(next);
+      const store = await browserStorage.getDocumentStore();
+      const indexes = await browserStorage.getDocumentIndexes();
+      if (mutator(store, indexes)) {
+        await browserStorage.setDocumentCaches(store, indexes);
+      }
     } catch (error) {
       console.error('Documents cache update failed:', error);
     }
@@ -99,28 +103,34 @@ function markStale(entry) {
   return { ...entry, stale: true };
 }
 
-/** Drop documents from every matching entry — safe with ids alone. */
+/**
+ * Drop documents from every matching listing — safe with ids alone.
+ *
+ * The body stays in the store: `removed` means unfiled from this path, not gone,
+ * and it is very likely still listed by another path. Eviction is the store's
+ * own business.
+ */
 export function removeDocumentsFromCache(payload) {
   const ids = new Set(documentIdsFrom(payload));
   if (ids.size === 0) return Promise.resolve();
   const matches = scopeMatcher(payload);
 
-  return enqueue((cache) => {
+  return enqueue((store, indexes) => {
     let changed = false;
-    for (const [key, entry] of Object.entries(cache)) {
-      if (!matches(entry) || !Array.isArray(entry.documents)) continue;
-      const kept = entry.documents.filter(doc => !ids.has(String(doc.id)));
-      if (kept.length === entry.documents.length) continue;
-      const dropped = entry.documents.length - kept.length;
-      cache[key] = {
+    for (const [key, entry] of Object.entries(indexes)) {
+      if (!matches(entry) || !Array.isArray(entry.ids)) continue;
+      const kept = entry.ids.filter(id => !ids.has(String(id)));
+      if (kept.length === entry.ids.length) continue;
+      const dropped = entry.ids.length - kept.length;
+      indexes[key] = {
         ...entry,
-        documents: kept,
+        ids: kept,
         count: kept.length,
         totalCount: Math.max(0, (entry.totalCount ?? kept.length) - dropped)
       };
       changed = true;
     }
-    return changed ? cache : null;
+    return changed;
   });
 }
 
@@ -135,73 +145,81 @@ export function insertDocumentIntoCache(payload) {
   const doc = tabDocumentFrom(payload);
   const matches = scopeMatcher(payload);
 
-  return enqueue((cache) => {
+  return enqueue((store, indexes) => {
     let changed = false;
-    for (const [key, entry] of Object.entries(cache)) {
-      if (!matches(entry) || !Array.isArray(entry.documents)) continue;
 
-      const canPatch = doc && (entry.offset ?? 0) === 0;
+    // Bank the body first, whether or not any listing can place it. It is worth
+    // holding on its own: the next path that lists this id renders it for free.
+    const projected = doc ? browserStorage.projectDocumentForCache(doc) : null;
+    if (projected) {
+      store[String(projected.id)] = { ...projected, updatedAt: Date.now() };
+      changed = true;
+    }
+
+    for (const [key, entry] of Object.entries(indexes)) {
+      if (!matches(entry) || !Array.isArray(entry.ids)) continue;
+
+      const canPatch = projected && (entry.offset ?? 0) === 0;
       if (!canPatch) {
         if (entry.stale) continue;
-        cache[key] = markStale(entry);
+        indexes[key] = markStale(entry);
         changed = true;
         continue;
       }
 
-      if (entry.documents.some(existing => String(existing.id) === String(doc.id))) continue;
+      const id = String(projected.id);
+      if (entry.ids.some(existing => String(existing) === id)) continue;
 
-      const projected = browserStorage.projectDocumentForCache(doc);
-      if (!projected) continue;
-
-      const limit = entry.limit || entry.documents.length + 1;
-      const documents = [projected, ...entry.documents].slice(0, limit);
-      cache[key] = {
+      const limit = entry.limit || entry.ids.length + 1;
+      const ids = [id, ...entry.ids].slice(0, limit);
+      indexes[key] = {
         ...entry,
-        documents,
-        count: documents.length,
-        totalCount: (entry.totalCount ?? entry.documents.length) + 1
+        ids,
+        count: ids.length,
+        totalCount: (entry.totalCount ?? entry.ids.length) + 1
       };
       changed = true;
     }
-    return changed ? cache : null;
+    return changed;
   });
 }
 
 /**
- * Apply a document update. With a body we patch the projection in place; without
- * one the entry goes stale — the id list is unchanged, so nothing else would
- * catch a retitled tab.
+ * Apply a document update.
+ *
+ * With a body this is now a one-line write to the store — no index is touched
+ * and nothing goes stale, because every path that lists this id reads the same
+ * record and is correct the moment it lands. That is the whole payoff of keying
+ * bodies by document id instead of by path.
+ *
+ * Without a body we still can't know what changed, so listings holding that id
+ * go stale (an id-list check would call a retitled tab "unchanged").
  */
 export function updateDocumentInCache(payload) {
   const doc = tabDocumentFrom(payload);
   const ids = new Set(documentIdsFrom(payload));
   const matches = scopeMatcher(payload);
 
-  return enqueue((cache) => {
+  return enqueue((store, indexes) => {
+    if (doc) {
+      const projected = browserStorage.projectDocumentForCache(doc);
+      if (!projected) return false;
+      store[String(projected.id)] = { ...projected, updatedAt: Date.now() };
+      return true;
+    }
+
     let changed = false;
-    for (const [key, entry] of Object.entries(cache)) {
-      if (!matches(entry) || !Array.isArray(entry.documents)) continue;
+    for (const [key, entry] of Object.entries(indexes)) {
+      if (!matches(entry) || !Array.isArray(entry.ids)) continue;
 
-      if (doc) {
-        const index = entry.documents.findIndex(existing => String(existing.id) === String(doc.id));
-        if (index === -1) continue;
-        const projected = browserStorage.projectDocumentForCache(doc);
-        if (!projected) continue;
-        const documents = [...entry.documents];
-        documents[index] = projected;
-        cache[key] = { ...entry, documents };
-        changed = true;
-        continue;
-      }
-
-      // No body: only bother when the entry actually holds one of these ids.
+      // Only bother when this listing actually holds one of these ids.
       const holdsDocument = ids.size === 0 ||
-        entry.documents.some(existing => ids.has(String(existing.id)));
+        entry.ids.some(existing => ids.has(String(existing)));
       if (!holdsDocument || entry.stale) continue;
-      cache[key] = markStale(entry);
+      indexes[key] = markStale(entry);
       changed = true;
     }
-    return changed ? cache : null;
+    return changed;
   });
 }
 
@@ -212,14 +230,16 @@ export function updateDocumentInCache(payload) {
  */
 export function invalidateCacheScope(payload) {
   const matches = scopeMatcher(payload);
-  return enqueue((cache) => {
+  return enqueue((store, indexes) => {
     let changed = false;
-    for (const [key, entry] of Object.entries(cache)) {
+    for (const [key, entry] of Object.entries(indexes)) {
       if (!matches(entry)) continue;
-      delete cache[key];
+      // Only the listing is wrong. The bodies stay — they are still the same
+      // documents, and whatever listing comes next will very likely want them.
+      delete indexes[key];
       changed = true;
     }
-    return changed ? cache : null;
+    return changed;
   });
 }
 

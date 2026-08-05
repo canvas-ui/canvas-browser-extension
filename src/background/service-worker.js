@@ -405,6 +405,7 @@ function setupWebSocketEventHandlers() {
     webSocketClient.on(eventType, (data) => {
       console.log(`Tree event: ${eventType}`, data);
       void browserStorage.clearTreeCache();
+      invalidateMenuWorkspaceData();
       scheduleContextMenusSetup();
       broadcastToPopup(eventType, data);
     });
@@ -459,6 +460,61 @@ function scheduleRefreshTabLists() {
 }
 
 let contextMenusDebounce = null;
+// Context-menu source data: the workspace list plus one tree per workspace.
+//
+// The menus are rebuilt on every selection change, and each rebuild builds two
+// parallel menu trees ("Send page to Canvas" and the close-tab variant). Fetched
+// per menu, per workspace, in series, that was 2 × (1 + N) blocking round-trips
+// on every path switch — the lag you feel navigating a tree. Fetch it once, in
+// parallel, and hold it briefly: trees change rarely, and the events that do
+// change them already invalidate this.
+const MENU_DATA_TTL_MS = 2 * 60 * 1000;
+let menuWorkspaceData = null; // { fetchedAt, workspaces, treesByWorkspace }
+let menuWorkspaceDataInFlight = null;
+
+function invalidateMenuWorkspaceData() {
+  menuWorkspaceData = null;
+}
+
+async function getMenuWorkspaceData() {
+  if (menuWorkspaceData && (Date.now() - menuWorkspaceData.fetchedAt) < MENU_DATA_TTL_MS) {
+    return menuWorkspaceData;
+  }
+  // Two menu builds run back to back — the second must not repeat the fetch.
+  if (menuWorkspaceDataInFlight) return await menuWorkspaceDataInFlight;
+
+  menuWorkspaceDataInFlight = (async () => {
+    const empty = { fetchedAt: Date.now(), workspaces: [], treesByWorkspace: new Map() };
+    try {
+      const workspacesResp = await apiClient.getWorkspaces();
+      const workspaces = (workspacesResp?.status === 'success' && Array.isArray(workspacesResp.payload))
+        ? workspacesResp.payload
+        : [];
+
+      const entries = await Promise.all(workspaces.map(async (workspace) => {
+        const key = workspace.name || workspace.id;
+        try {
+          const treeResp = await apiClient.getWorkspaceTree(key);
+          return [key, treeResp?.payload || treeResp?.data || treeResp || null];
+        } catch (error) {
+          console.warn(`Failed to load tree for workspace ${key}:`, error?.message || error);
+          return [key, null];
+        }
+      }));
+
+      menuWorkspaceData = { fetchedAt: Date.now(), workspaces, treesByWorkspace: new Map(entries) };
+      return menuWorkspaceData;
+    } catch (error) {
+      console.error('Failed to load workspace data for context menus:', error);
+      return empty;
+    } finally {
+      menuWorkspaceDataInFlight = null;
+    }
+  })();
+
+  return await menuWorkspaceDataInFlight;
+}
+
 function scheduleContextMenusSetup() {
   clearTimeout(contextMenusDebounce);
   contextMenusDebounce = setTimeout(() => {
@@ -1229,6 +1285,12 @@ async function handleConnect(data, sendResponse) {
 
     console.log('Connection saved successfully');
 
+    // The reply below only reaches whoever asked to connect (the settings page).
+    // The side panel / sidebar is a separate long-lived document that would
+    // otherwise keep rendering the disconnected header until something else
+    // happened to refresh it.
+    broadcastToPopup('connection.changed', { connected: true, user: testResult.user });
+
     sendResponse({
       success: true,
       connected: true,
@@ -1250,6 +1312,8 @@ async function handleConnect(data, sendResponse) {
 
     // Clear user info on failed connection
     await browserStorage.setUserInfo(null);
+
+    broadcastToPopup('connection.changed', { connected: false, error: error.message });
 
     sendResponse({
       success: false,
@@ -1285,6 +1349,7 @@ async function handleDisconnect(sendResponse) {
     await browserStorage.clearDocumentsCache();
     await browserStorage.clearTreeCache();
     await browserStorage.clearTabSessionState();
+    invalidateMenuWorkspaceData();
 
     // Disconnect WebSocket if connected
     if (webSocketClient.isConnected()) {
@@ -1301,6 +1366,9 @@ async function handleDisconnect(sendResponse) {
     await setSessionBadge('ok');
 
     console.log('Disconnected successfully');
+
+    // Same reason as connect: the side panel isn't the caller.
+    broadcastToPopup('connection.changed', { connected: false });
 
     sendResponse({
       success: true,
@@ -1624,8 +1692,10 @@ async function handleSetModeAndSelection(data, sendResponse) {
       }
     }
 
-    // Update context menus after mode/selection change
-    await setupContextMenus();
+    // Update context menus after mode/selection change. Debounced and not
+    // awaited: menus are ambient UI, and making the caller wait on a menu
+    // rebuild is what made switching tree paths feel slow.
+    scheduleContextMenusSetup();
 
     const connectionSettings = await browserStorage.getConnectionSettings();
     if (connectionSettings.connected && connectionSettings.apiToken) {
@@ -2069,9 +2139,6 @@ async function handleSaveSettings(data, sendResponse) {
     // Save sync settings
     if (data.syncSettings) {
       await browserStorage.setSyncSettings(data.syncSettings);
-      // These shape the document query (browser-scoped tag filter, fetch limit,
-      // tree preference) — cached pages may no longer match it.
-      await browserStorage.clearDocumentsCache();
       console.log('Sync settings saved');
     }
 
@@ -2093,6 +2160,15 @@ async function handleSaveSettings(data, sendResponse) {
       identity: verifyIdentity,
       context: verifyContext
     });
+
+    // Any saved setting can reshape the document query — sync settings (the
+    // browser-scoped tag filter, fetch limit, tree preference) and the browser
+    // identity that filter keys off. Cheaper to drop the cache than to work out
+    // which combinations still match.
+    await browserStorage.clearDocumentsCache();
+
+    // Settings can point at a different server entirely
+    invalidateMenuWorkspaceData();
 
     // Update context menus after settings change
     await setupContextMenus();
@@ -2323,7 +2399,7 @@ function isDocumentIdPayload(payload) {
 function normalizeCanvasFetchLimit(value) {
   const limit = Number(value);
   if (!Number.isFinite(limit)) return 200;
-  return Math.min(1000, Math.max(1, Math.floor(limit)));
+  return Math.min(2000, Math.max(1, Math.floor(limit)));
 }
 
 function normalizeCanvasFetchOffset(value) {
@@ -2929,13 +3005,12 @@ async function setupContextMenus() {
     // Helper function to build workspace tree for a given parent menu ID and context
     const buildWorkspaceMenus = async (parentMenuId, contextType, idPrefix = '') => {
       try {
-        const workspacesResp = await apiClient.getWorkspaces();
-        console.log(`🔧 Workspaces response for ${contextType}:`, workspacesResp);
+        const { workspaces, treesByWorkspace } = await getMenuWorkspaceData();
 
-        if (workspacesResp.status === 'success' && workspacesResp.payload) {
-          console.log(`🔧 Creating workspace menus for ${workspacesResp.payload.length} workspaces (${contextType})...`);
+        if (workspaces.length > 0) {
+          console.log(`🔧 Creating workspace menus for ${workspaces.length} workspaces (${contextType})...`);
 
-          for (const workspace of workspacesResp.payload) {
+          for (const workspace of workspaces) {
             const wsId = `${idPrefix}ws:${workspace.name || workspace.id}`;
             console.log(`🔧 Creating workspace menu for: ${workspace.name || workspace.id} (${contextType})`);
 
@@ -2954,10 +3029,9 @@ async function setupContextMenus() {
               continue;
             }
 
-            // Try to get workspace tree for this workspace
+            // Tree came from the shared fetch above — no request per menu.
             try {
-              const treeResp = await apiClient.getWorkspaceTree(workspace.name || workspace.id);
-              const tree = treeResp?.payload || treeResp?.data || treeResp;
+              const tree = treesByWorkspace.get(workspace.name || workspace.id);
 
               if (tree && tree.children && Array.isArray(tree.children)) {
                 // Add root option

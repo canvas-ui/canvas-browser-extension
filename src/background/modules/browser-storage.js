@@ -30,7 +30,8 @@ export class BrowserStorage {
       PINNED_TABS: 'canvasPinnedTabs',
       USER_INFO: 'canvasUserInfo',
       RECENT_DESTINATIONS: 'canvasRecentDestinations',
-      CANVAS_DOCUMENTS_CACHE: 'canvasDocumentsCache',
+      CANVAS_DOCUMENT_STORE: 'canvasDocumentStore',
+      CANVAS_DOCUMENT_INDEXES: 'canvasDocumentIndexes',
       CANVAS_TREE_CACHE: 'canvasTreeCache',
       TAB_SESSION_STATE: 'canvasTabSessionState'
     };
@@ -40,6 +41,11 @@ export class BrowserStorage {
     // capped by entry count and age rather than measured bytes.
     this.DOCUMENTS_CACHE_MAX_ENTRIES = 20;
     this.DOCUMENTS_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
+    // Entry count alone stops bounding anything once the page size is
+    // configurable: 20 entries of 2000 projections would be ~8 MB against a
+    // 10 MB budget. Bound the documents instead, so a bigger fetch limit costs
+    // fewer retained pages rather than more bytes.
+    this.DOCUMENTS_CACHE_MAX_DOCUMENTS = 6000;
 
     // Tab session state is tiny per entry (five numbers) but accumulates one
     // entry per document ever restored, so it gets a longer life and a higher
@@ -80,7 +86,8 @@ export class BrowserStorage {
       [this.KEYS.PINNED_TABS]: [],
       [this.KEYS.USER_INFO]: null, // { id, name, email, userType, status }
       [this.KEYS.RECENT_DESTINATIONS]: [], // Array of recent destinations: [{ id, title, type: 'workspace'|'context', workspaceName?, contextSpec?, timestamp }]
-      [this.KEYS.CANVAS_DOCUMENTS_CACHE]: {}, // { [scopeKey]: { documents, count, totalCount, offset, limit, fetchedAt, serverUrl } }
+      [this.KEYS.CANVAS_DOCUMENT_STORE]: {}, // { [documentId]: { id, data: {title, url, favIconUrl}, updatedAt } }
+      [this.KEYS.CANVAS_DOCUMENT_INDEXES]: {}, // { [scopeKey]: { ids, count, totalCount, offset, limit, fetchedAt, serverUrl, scope, stale } }
       [this.KEYS.CANVAS_TREE_CACHE]: {}, // { [treeKey]: { tree, fetchedAt, serverUrl } }
       [this.KEYS.TAB_SESSION_STATE]: {} // { [documentId]: { windowId, index, muted, active, groupId, updatedAt } }
     };
@@ -289,63 +296,176 @@ export class BrowserStorage {
     };
   }
 
-  async getDocumentsCache() {
-    const cache = await this.get(this.KEYS.CANVAS_DOCUMENTS_CACHE);
-    return (cache && typeof cache === 'object' && !Array.isArray(cache)) ? cache : {};
+  // Storage is normalized, because Canvas documents are content-addressed: a
+  // tab's checksum field is its url, so the same page filed under /search,
+  // /utils/web/search and /design/web/ui is ONE document id linked into three
+  // tree paths — not three documents. Keying cached bodies by path would store
+  // it three times and force an edit to be patched in three places.
+  //
+  //   store:   { [documentId]: projection }        one copy, shared by every path
+  //   indexes: { [scopeKey]: { ids, … } }          what each path/page lists
+  //
+  // Which also means a path you have never opened can render without fetching a
+  // single document body, as long as its ids resolve in the store.
+
+  async getDocumentStore() {
+    const store = await this.get(this.KEYS.CANVAS_DOCUMENT_STORE);
+    return (store && typeof store === 'object' && !Array.isArray(store)) ? store : {};
   }
 
-  async setDocumentsCache(cache) {
-    return await this.set(this.KEYS.CANVAS_DOCUMENTS_CACHE, cache || {});
+  async getDocumentIndexes() {
+    const indexes = await this.get(this.KEYS.CANVAS_DOCUMENT_INDEXES);
+    return (indexes && typeof indexes === 'object' && !Array.isArray(indexes)) ? indexes : {};
   }
 
-  // Returns a usable entry or null. Entries from another server, or older than
-  // the TTL, are never rendered — a stale list is worse than a brief empty one.
+  async setDocumentCaches(store, indexes) {
+    const pruned = this.pruneDocumentCaches(store || {}, indexes || {});
+    await this.set(this.KEYS.CANVAS_DOCUMENT_STORE, pruned.store);
+    await this.set(this.KEYS.CANVAS_DOCUMENT_INDEXES, pruned.indexes);
+    return true;
+  }
+
+  // Resolve an index against the store. Returns the same shape callers had when
+  // this was one blob — or null, which means "fetch". Null on: no index, wrong
+  // server, expired, or any listed id whose body has been evicted. Partial is
+  // not an option: a page missing rows is worse than a page that arrives late.
   async getCachedDocuments(key, serverUrl) {
     if (!key) return null;
-    const cache = await this.getDocumentsCache();
-    const entry = cache[key];
-    if (!entry || !Array.isArray(entry.documents)) return null;
+
+    const indexes = await this.getDocumentIndexes();
+    const entry = indexes[key];
+    if (!entry || !Array.isArray(entry.ids)) return null;
     if (serverUrl && entry.serverUrl !== serverUrl) return null;
     if (!Number.isFinite(entry.fetchedAt) || (Date.now() - entry.fetchedAt) > this.DOCUMENTS_CACHE_TTL_MS) return null;
-    return entry;
+
+    const store = await this.getDocumentStore();
+    const documents = [];
+    for (const id of entry.ids) {
+      const doc = store[String(id)];
+      if (!doc) return null;
+      documents.push(doc);
+    }
+
+    return {
+      documents,
+      count: entry.count ?? documents.length,
+      totalCount: entry.totalCount ?? documents.length,
+      offset: entry.offset ?? 0,
+      limit: entry.limit ?? documents.length,
+      fetchedAt: entry.fetchedAt,
+      stale: entry.stale === true
+    };
+  }
+
+  // Resolve an arbitrary id list against the store alone — no index needed. This
+  // is what makes a first visit to a path cheap: ask the server for the ids
+  // (small), and if every body is already here from another path, render with no
+  // document fetch at all. Returns null the moment one is missing.
+  async resolveCachedDocumentIds(ids = []) {
+    if (!Array.isArray(ids)) return null;
+    if (ids.length === 0) return [];
+
+    const store = await this.getDocumentStore();
+    const documents = [];
+    for (const id of ids) {
+      const doc = store[String(id)];
+      if (!doc) return null;
+      documents.push(doc);
+    }
+    return documents;
   }
 
   async setCachedDocuments(key, { documents = [], count, totalCount, offset, limit, serverUrl, scope } = {}) {
     if (!key) return false;
-    const cache = await this.getDocumentsCache();
 
-    cache[key] = {
-      documents: documents.map(doc => this.projectDocumentForCache(doc)).filter(Boolean),
-      count: count ?? documents.length,
-      totalCount: totalCount ?? documents.length,
+    const store = await this.getDocumentStore();
+    const indexes = await this.getDocumentIndexes();
+    const now = Date.now();
+
+    const ids = [];
+    for (const doc of documents) {
+      const projected = this.projectDocumentForCache(doc);
+      if (!projected) continue;
+      const id = String(projected.id);
+      store[id] = { ...projected, updatedAt: now };
+      ids.push(id);
+    }
+
+    indexes[key] = {
+      ids,
+      count: count ?? ids.length,
+      totalCount: totalCount ?? ids.length,
       offset: offset ?? 0,
-      limit: limit ?? documents.length,
-      fetchedAt: Date.now(),
+      limit: limit ?? ids.length,
+      fetchedAt: now,
       serverUrl: serverUrl || null,
       // Scope components are kept alongside the key so the service worker can
       // match live events to entries without parsing keys back apart.
       scope: scope || null,
-      // Set when an event told us the entry moved but not precisely enough to
-      // patch it. Still rendered on open — but revalidated in full, since an
-      // id-list check would call a content-only change "unchanged".
+      // Set when an event told us the listing moved but not precisely enough to
+      // patch it. Still rendered on open — but revalidated in full.
       stale: false
     };
 
-    return await this.setDocumentsCache(this.pruneDocumentsCache(cache));
+    return await this.setDocumentCaches(store, indexes);
   }
 
-  // Drop expired entries, then the oldest ones over the entry cap.
-  pruneDocumentsCache(cache) {
+  /**
+   * Bound both halves.
+   *
+   * Indexes: TTL, then newest-first up to the entry cap, then stop before the
+   * documents they reference exceed the budget (the newest is always kept).
+   *
+   * Store: everything the surviving indexes reference, then — with whatever
+   * budget is left — the most recently touched unreferenced bodies. Those
+   * leftovers are the point: a document whose index has been evicted still makes
+   * some other path render for free.
+   */
+  pruneDocumentCaches(store, indexes) {
     const now = Date.now();
-    const entries = Object.entries(cache)
+    const fresh = Object.entries(indexes)
       .filter(([, entry]) => Number.isFinite(entry?.fetchedAt) && (now - entry.fetchedAt) <= this.DOCUMENTS_CACHE_TTL_MS)
       .sort((a, b) => b[1].fetchedAt - a[1].fetchedAt)
       .slice(0, this.DOCUMENTS_CACHE_MAX_ENTRIES);
-    return Object.fromEntries(entries);
+
+    const keptIndexes = [];
+    const referenced = new Set();
+    for (const [key, entry] of fresh) {
+      const ids = Array.isArray(entry.ids) ? entry.ids.map(String) : [];
+      if (keptIndexes.length > 0) {
+        const projectedSize = new Set([...referenced, ...ids]).size;
+        if (projectedSize > this.DOCUMENTS_CACHE_MAX_DOCUMENTS) break;
+      }
+      keptIndexes.push([key, entry]);
+      ids.forEach(id => referenced.add(id));
+    }
+
+    const keptStore = {};
+    for (const id of referenced) {
+      if (store[id]) keptStore[id] = store[id];
+    }
+
+    let documentCount = Object.keys(keptStore).length;
+    const spare = Object.entries(store)
+      .filter(([id]) => !referenced.has(id))
+      .sort((a, b) => (b[1]?.updatedAt || 0) - (a[1]?.updatedAt || 0));
+    for (const [id, doc] of spare) {
+      if (documentCount >= this.DOCUMENTS_CACHE_MAX_DOCUMENTS) break;
+      keptStore[id] = doc;
+      documentCount++;
+    }
+
+    return { store: keptStore, indexes: Object.fromEntries(keptIndexes) };
   }
 
   async clearDocumentsCache() {
-    return await this.set(this.KEYS.CANVAS_DOCUMENTS_CACHE, {});
+    await this.set(this.KEYS.CANVAS_DOCUMENT_STORE, {});
+    await this.set(this.KEYS.CANVAS_DOCUMENT_INDEXES, {});
+    // Older builds kept one denormalized blob here; drop it so it can't linger.
+    try {
+      await this.storage.remove('canvasDocumentsCache');
+    } catch { /* nothing to remove */ }
+    return true;
   }
 
   // Tree cache. Same cold-open problem as the documents list ("Loading tree…"),

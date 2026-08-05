@@ -220,6 +220,57 @@ again, confirming it degrades to a plain open rather than throwing.
 - Major version bump for the above: `2.8.6` → `3.0.0`. Three files, no sync
   script — `package.json:3`, `manifest-chromium.json:4`, `manifest-firefox.json:4`.
 
+## Refresh the sidebar on connect — **DONE**
+
+The sidebar showed "not connected" after a successful connect. `handleConnect()`
+only `sendResponse`s, which reaches the settings page that asked — and the
+settings page sends `CONNECT` alone, never `SAVE_SETTINGS`, so no
+`settings.saved` broadcast followed either. The side panel / sidebar is the same
+`popup.html` document with `?host=panel`, but unlike the popup it stays open
+across the whole connect, so nothing ever told it to re-read the state.
+
+Fixed by broadcasting `connection.changed` from connect (success *and* failure)
+and from disconnect; the popup handles it with `loadInitialData()`. Disconnect
+had the same staleness in reverse.
+
+## Normalized cache — id-keyed bodies + id-list indexes — **DONE**
+
+The per-path cache from Phase 1 was wrong about identity. Canvas documents are
+content-addressed and a tab's checksum field is its url
+(`synapsd/src/index.js`), so the same page filed under `/search`,
+`/utils/web/search` and `/design/web/ui` is **one document id linked into three
+tree paths**, not three documents. Caching bodies per path stored it three times
+and made one edit a three-place patch.
+
+    store:   { [documentId]: projection }   one copy, shared by every path
+    indexes: { [scopeKey]: { ids, … } }     what each path/page lists
+
+- **A never-visited path can render with no document fetch.** Ask for its id list
+  (`idsOnly`, ~1.5 KB) and resolve it against the store — `/` → `/Library` after
+  loading `/` costs one tiny request and zero bodies. This is the case the Phase 1
+  notes wrongly called underivable; that was true of the layout, not the problem.
+- **An update is one store write.** Every path listing that id is correct at once,
+  so content changes no longer mark listings stale and refetch.
+- Removal unfiles from the listing but keeps the body — it is almost certainly
+  still listed elsewhere. Same for `context.url.set`: drop the listing, keep the
+  bodies.
+- Resolution is all-or-nothing: an index whose ids don't all resolve returns null
+  and the page is fetched. Partial pages are worse than late ones. (A batch
+  get-documents-by-ids endpoint would let us fill just the gaps — the one thing
+  that would still improve this.)
+- Eviction is reference-aware: keep what surviving indexes reference, then spend
+  what's left of the budget on the most recently touched *unreferenced* bodies —
+  those are what make the next unvisited path free.
+- Fetch limit raised 1000 → 2000 (client-side cap, four places). The cache is
+  bounded by total documents (6000), not entry count, so a bigger page size costs
+  fewer retained pages rather than more bytes.
+
+Covered by `tests/documents-cache.test.js` (13 tests, `npm test`) against a
+stubbed `chrome.storage.local` in `tests/helpers/browser-stub.js`: dedup across
+three paths, one-update-fixes-all, stale-on-bodyless-update, store-only
+hydration, remove/insert patching, scope isolation between contexts, budget
+eviction with no dangling ids, and the legacy-blob cleanup on clear.
+
 ## Not verified in a browser yet
 
 Phases 1–3 are lint- and build-clean, and the server side of Phase 1 is verified

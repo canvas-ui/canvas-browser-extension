@@ -819,7 +819,7 @@ function updateUnloadOptionsVisibility() {
 function normalizeCanvasTabsFetchLimit(value) {
   const limit = Number(value);
   if (!Number.isFinite(limit)) return 200;
-  return Math.min(1000, Math.max(1, Math.floor(limit)));
+  return Math.min(2000, Math.max(1, Math.floor(limit)));
 }
 
 async function handleModeChange() {

@@ -47,7 +47,7 @@ let syncAllBtn, syncToAllBtn, closeAllBtn, openAllBtn, canvasPrevPageBtn, canvas
 let browserBulkActions, canvasBulkActions;
 let syncSelectedBtn, syncToSelectedBtn, syncCloseSelectedBtn, closeSelectedBtn, openSelectedBtn, removeSelectedBtn, deleteSelectedBtn;
 let selectAllBrowser, selectAllCanvas;
-let browserTabsHeader, canvasTabsHeader;
+let browserTabsHeader, canvasTabsHeader, canvasPageIndicator;
 let toast;
 
 // Context menu elements - REMOVED: Popup context menus don't work properly due to popup boundaries
@@ -200,6 +200,13 @@ runtime.onMessage.addListener((message) => {
       loadTabs();
       break;
 
+    case 'connection.changed':
+      // Connect/disconnect happens in the settings page, but the side panel
+      // stays open across it — reload rather than let it show a stale header.
+      console.log('Connection state changed:', message.data);
+      loadInitialData();
+      break;
+
     case 'websocket.context.joined':
       console.log('Joined context:', message.data);
       break;
@@ -337,6 +344,7 @@ function initializeElements() {
   // Tab count headers
   browserTabsHeader = document.getElementById('browserTabsHeader');
   canvasTabsHeader = document.getElementById('canvasTabsHeader');
+  canvasPageIndicator = document.getElementById('canvasPageIndicator');
 
   // Tree view elements
   treeBackBtn = document.getElementById('treeBackBtn');
@@ -810,7 +818,8 @@ async function loadTabs() {
 
     const docsResponse = cached
       ? await revalidateCanvasDocuments(cached)
-      : await fetchCurrentDocumentList();
+      // No listing cached for this path — the ids may still resolve locally.
+      : (await hydrateCanvasDocumentsFromIds()) || await fetchCurrentDocumentList();
     setCanvasListStale(false);
 
     if (docsResponse?.success) {
@@ -981,6 +990,35 @@ async function writeCanvasDocumentsCache(response) {
   }
 }
 
+// No cached listing for this path — but the documents themselves may already be
+// here, because bodies are keyed by document id and shared across every path
+// that lists them. Ask for the id list alone (small) and try to satisfy it
+// locally: navigating into a subfolder of a path you already loaded then costs
+// one tiny request and no document fetch at all.
+//
+// All-or-nothing: if even one body is missing we fall through to a normal fetch,
+// since there is no batch get-documents-by-ids endpoint to fill just the gaps.
+async function hydrateCanvasDocumentsFromIds() {
+  const idsResponse = await fetchCurrentDocumentList({ idsOnly: true });
+  if (!idsResponse?.success) return idsResponse;
+
+  // Old server ignored the param and sent documents — that's already the answer.
+  if (!idsResponse.idsOnly) return idsResponse;
+
+  const documents = await browserStorage.resolveCachedDocumentIds(idsResponse.ids || []);
+  if (!documents) return null; // Not fully cached — caller does the full fetch.
+
+  console.log(`Canvas documents resolved from the local store: ${documents.length} (no bodies fetched)`);
+  return {
+    success: true,
+    documents,
+    count: idsResponse.count ?? documents.length,
+    totalCount: idsResponse.totalCount ?? documents.length,
+    offset: canvasPagination.offset,
+    limit: canvasPagination.limit
+  };
+}
+
 // Cheap confirmation that a cached page is still current: ask for ids only and
 // compare. On a match nothing re-renders; on any difference we re-fetch the page
 // (200 docs is one small response — cheaper than plumbing per-document hydration).
@@ -1015,6 +1053,22 @@ async function revalidateCanvasDocuments(cached) {
     };
   }
 
+  // The listing moved. Often it moved to documents we already hold — a tab
+  // unfiled from this path, or one filed in from another — so try the store
+  // before paying for the page.
+  const documents = await browserStorage.resolveCachedDocumentIds(freshIds);
+  if (documents) {
+    console.log(`Canvas listing changed but resolved locally: ${documents.length} documents (no bodies fetched)`);
+    return {
+      success: true,
+      documents,
+      count: idsResponse.count ?? documents.length,
+      totalCount: idsResponse.totalCount ?? documents.length,
+      offset: canvasPagination.offset,
+      limit: canvasPagination.limit
+    };
+  }
+
   return await fetchCurrentDocumentList();
 }
 
@@ -1043,12 +1097,38 @@ function updateCanvasPaginationButtons() {
     const nextOffset = canvasPagination.offset + canvasPagination.count;
     canvasNextPageBtn.disabled = canvasPagination.totalCount <= 0 || nextOffset >= canvasPagination.totalCount;
   }
+  updateCanvasPageIndicator();
+}
+
+// Where you are in the result set, next to the buttons that move you through it.
+// The page size is deliberately absent — it's a request parameter, not something
+// the user is looking at.
+function updateCanvasPageIndicator() {
+  if (!canvasPageIndicator) return;
+
+  const { offset, limit, totalCount } = canvasPagination;
+  const pageSize = limit > 0 ? limit : 200;
+
+  // One page of results needs no pager.
+  if (!totalCount || totalCount <= pageSize) {
+    canvasPageIndicator.textContent = '';
+    canvasPageIndicator.removeAttribute('title');
+    canvasPageIndicator.style.display = 'none';
+    return;
+  }
+
+  const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
+  const currentPage = Math.min(totalPages, Math.floor(offset / pageSize) + 1);
+
+  canvasPageIndicator.style.display = '';
+  canvasPageIndicator.textContent = `${currentPage}/${totalPages} (${totalCount.toLocaleString()})`;
+  canvasPageIndicator.title = `Page ${currentPage} of ${totalPages} — ${totalCount.toLocaleString()} context tabs total`;
 }
 
 function normalizeCanvasFetchLimit(value) {
   const limit = Number(value);
   if (!Number.isFinite(limit)) return 200;
-  return Math.min(1000, Math.max(1, Math.floor(limit)));
+  return Math.min(2000, Math.max(1, Math.floor(limit)));
 }
 
 async function loadCanvasPage(offset) {
@@ -1068,7 +1148,7 @@ async function loadCanvasPage(offset) {
 
   const response = cached
     ? await revalidateCanvasDocuments(cached)
-    : await fetchCurrentDocumentList();
+    : (await hydrateCanvasDocumentsFromIds()) || await fetchCurrentDocumentList();
   setCanvasListStale(false);
 
   applyCanvasDocumentResponse(response);
@@ -1275,17 +1355,18 @@ function updateTabCountHeaders() {
     browserTabsHeader.textContent = `${headerText} (${browserTabs.length})`;
   }
 
-  // Update canvas tabs header
+  // Update canvas tabs header. Just what is listed — where that sits in the
+  // result set is the pager's job. The heading names the filter (the way the
+  // browser-tabs heading above does), so a count of 199 out of a 200-tab page
+  // reads as "one of them is already open" rather than as bad arithmetic.
   const filteredCanvasTabs = getFilteredCanvasTabs();
-  const totalCount = canvasPagination.totalCount || filteredCanvasTabs.length;
-  const fetchedCount = canvasPagination.count || canvasTabs.length;
-  const pageCount = `${fetchedCount}/${totalCount}`;
+  const canvasHeaderText = showingAllCanvasTabs ? 'Canvas Context Tabs' : 'Unopened Context Tabs';
+
   if (isSearching) {
     const visibleCanvasTabs = canvasToBrowserList.querySelectorAll('.tab-item:not([style*="display: none"])').length;
-    const totalCanvasTabs = filteredCanvasTabs.length;
-    canvasTabsHeader.textContent = `Canvas Context Tabs (${visibleCanvasTabs}/${totalCanvasTabs}, fetched ${pageCount})`;
+    canvasTabsHeader.textContent = `${canvasHeaderText} (${visibleCanvasTabs}/${filteredCanvasTabs.length})`;
   } else {
-    canvasTabsHeader.textContent = `Canvas Context Tabs (${filteredCanvasTabs.length}, fetched ${pageCount})`;
+    canvasTabsHeader.textContent = `${canvasHeaderText} (${filteredCanvasTabs.length})`;
   }
   updateCanvasPaginationButtons();
 }
