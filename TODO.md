@@ -90,7 +90,34 @@ fetch limit, tree preference — without changing the cache key).
 - `markSyncedBrowserTabs(canvasTabs)` (`popup.js:781`) runs off this data, so a
   cache hit also fixes the first-paint flash where synced tabs look unsynced.
 
-### Phase 2 — keep the cache warm from the websocket
+### Phase 2 — keep the cache warm from the websocket — **DONE**
+
+`src/background/modules/documents-cache.js` maintains the cache from the events
+the service worker already receives. Grounded in what the payloads actually
+carry: single `document.inserted` has the full document, `tree.document.*` and
+every `.batch` variant carry ids only.
+
+- **Patch what the payload proves, mark the rest stale.** Removals patch from ids
+  alone. An insert with a document body patches page 0 (prepend, trim, bump
+  totalCount); deeper pages all shift, so they go stale instead. An update with a
+  body patches the projection in place.
+- **`stale` was needed for a hole in Phase 1**: a content-only change (a retitled
+  tab) leaves the id list identical, so the `idsOnly` check would call it
+  "unchanged" and never repaint. A stale entry is still painted instantly, it
+  just skips the id check and re-fetches.
+- Coarse events (`context.changed`, `context.url.set`) delete the matching
+  entries rather than patching them. Entries carry their `scope`
+  (`{mode, id, path}`) so events match without parsing keys; when a payload
+  doesn't identify a scope we over-invalidate deliberately — one refetch beats
+  showing another scope's tabs.
+- All mutations go through one promise chain: `storage.local` read-modify-write
+  is not atomic and these events arrive in bursts.
+- **Tree cache done too** (`CANVAS_TREE_CACHE`): painted from cache on open,
+  re-rendered only when the fetched tree differs (re-rendering an identical tree
+  would collapse the user's expansions), dropped wholesale on any
+  `workspace.tree.*` / `directory.*` event.
+
+### Phase 2 — original plan
 
 - Phase 1 still shows stale content for one round-trip. Fix by having the service
   worker maintain the cache instead of the popup only filling it on open.
@@ -112,7 +139,34 @@ network wait; switch context/workspace/server and confirm no cross-scope leak;
 mutate documents from another client with the popup closed, reopen, confirm the
 list is correct (Phase 2: correct immediately, no flash).
 
-## Phase 3 — restore browser tab state across context switches
+## Phase 3 — restore browser tab state across context switches — **DONE**
+
+Split implemented exactly as decided: `pinned` stays in the document,
+`{windowId, index, muted, active, groupId}` live in `storage.local` under
+`TAB_SESSION_STATE`, keyed by document id (capped at 500, 30-day TTL, and
+cleared on disconnect and server change — document ids are per-server and would
+otherwise collide).
+
+- **Capture** in `syncEngine.unloadTabsForContextChange()` — the one choke point
+  both close paths (`closeTabsNotInContext`, `closeCurrentTabs`) funnel through,
+  and the last moment a tab's placement still exists. Only tabs with a known
+  document id are recorded; restore is document-driven, so a tab without one has
+  nothing to key on.
+- **Restore** in both `openCanvasDocument()` *and* `openCanvasDocuments()` — the
+  bulk path is what a context switch actually re-opens through, and it was
+  calling `openTab()` directly. Both gotchas avoided: properties go into
+  `tabs.create({url, pinned, index, windowId})` rather than being assigned to the
+  returned object, and `muted` + grouping are applied afterwards (`mutedInfo` is
+  read-only on create). A recorded window is verified with `windows.get` first;
+  if it's gone the position is dropped with it, and any placement failure falls
+  back to a plain open.
+- **`active` is recorded but deliberately not applied**: with several tabs
+  restored at once it would just be a fight over focus, and the caller's intent
+  (a bulk open shouldn't yank focus) is the better default.
+- Legacy documents carrying `data.windowId` from the old version are still
+  honoured behind the existing `restoreWindow` option, but never written back.
+
+## Phase 3 — original plan
 
 **Problem.** In bound mode a context switch may close the old tabs and open new
 ones; switching back should restore the old set as closely as possible. Today it
@@ -161,10 +215,16 @@ before reimplementing.
 back — mute and window placement survive; then close that window and switch back
 again, confirming it degrades to a plain open rather than throwing.
 
-## Release
+## Release — **DONE**
 
 - Major version bump for the above: `2.8.6` → `3.0.0`. Three files, no sync
   script — `package.json:3`, `manifest-chromium.json:4`, `manifest-firefox.json:4`.
+
+## Not verified in a browser yet
+
+Phases 1–3 are lint- and build-clean, and the server side of Phase 1 is verified
+against a live server. The rest is code-verified only — the browser-side
+behaviour still needs the manual passes each phase describes under **Verify**.
 
 ## Backend features
 

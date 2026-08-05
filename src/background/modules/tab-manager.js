@@ -381,6 +381,101 @@ export class TabManager {
     }
   }
 
+  // Record where these tabs currently live, so a later restore can put them
+  // back. Only tabs we know a document id for are recorded — restore is driven
+  // by Canvas documents, so a tab with no document has nothing to key on.
+  //
+  // Called before tabs are closed or discarded on a context switch: that is the
+  // last moment their placement still exists.
+  async captureTabSessionState(tabs = []) {
+    try {
+      const entries = [];
+      for (const tab of (Array.isArray(tabs) ? tabs : [])) {
+        if (!tab || tab.id == null) continue;
+        const documentId = this.trackedTabs.get(tab.id)?.documentId;
+        if (!documentId) continue;
+
+        entries.push({
+          documentId,
+          state: {
+            windowId: Number.isInteger(tab.windowId) ? tab.windowId : null,
+            index: Number.isInteger(tab.index) ? tab.index : null,
+            muted: tab.mutedInfo?.muted === true,
+            active: tab.active === true,
+            groupId: Number.isInteger(tab.groupId) ? tab.groupId : null
+          }
+        });
+      }
+
+      if (entries.length === 0) return 0;
+      await browserStorage.recordTabSessionStates(entries);
+      console.log(`TabManager: Captured session state for ${entries.length} tab(s)`);
+      return entries.length;
+    } catch (error) {
+      console.error('TabManager: Failed to capture tab session state:', error);
+      return 0;
+    }
+  }
+
+  // Turn recorded state into tabs.create options. Best-effort throughout: a
+  // window that no longer exists just means a plain open in the current one.
+  async buildSessionCreateOptions(documentId) {
+    try {
+      const session = await browserStorage.getTabSessionState(documentId);
+      if (!session) return {};
+
+      const options = {};
+      if (Number.isInteger(session.index) && session.index >= 0) options.index = session.index;
+
+      if (Number.isInteger(session.windowId)) {
+        try {
+          await this.windowsAPI.get(session.windowId);
+          options.windowId = session.windowId;
+        } catch {
+          // Window is gone — drop the position with it, it means nothing in
+          // whichever window we land in instead.
+          delete options.index;
+        }
+      }
+
+      return options;
+    } catch (error) {
+      console.warn('TabManager: Failed to resolve tab session state:', error?.message || error);
+      return {};
+    }
+  }
+
+  // Properties tabs.create can't take: mutedInfo is read-only on create, and
+  // group membership is a separate call.
+  async applySessionStateAfterCreate(tabId, documentId) {
+    try {
+      const session = await browserStorage.getTabSessionState(documentId);
+      if (!session || tabId == null) return;
+
+      if (session.muted === true) {
+        try {
+          await this.tabsAPI.update(tabId, { muted: true });
+        } catch (error) {
+          console.warn('TabManager: Failed to restore muted state:', error?.message || error);
+        }
+      }
+
+      // Chromium only, and only into a group that still exists.
+      const groupId = session.groupId;
+      if (Number.isInteger(groupId) && groupId >= 0 &&
+          this.tabGroupsAPI?.get && typeof this.tabsAPI.group === 'function') {
+        try {
+          await this.tabGroupsAPI.get(groupId);
+          await this.tabsAPI.group({ groupId, tabIds: [tabId] });
+        } catch (error) {
+          console.log('TabManager: Tab group no longer available, leaving tab ungrouped:', error?.message || error);
+        }
+      }
+    } catch (error) {
+      console.warn('TabManager: Failed to apply tab session state:', error?.message || error);
+    }
+  }
+
   // Open URL in new tab
   async openTab(url, options = {}) {
     try {
@@ -923,30 +1018,43 @@ export class TabManager {
           };
         }
 
-        // Open new tabs in the current browser context by default. Stored Canvas
-        // window IDs are stale runtime state after restarts or across browsers.
+        // `pinned` comes from the document — it's a property of the bookmark.
+        // Window, position, mute and group come from local session state, which
+        // is per-machine and never synced.
         const baseOptions = {
           active: options.active !== false,
           pinned: canvasDoc.data.pinned || false
         };
-        const preferredWindowId = options.restoreWindow === true && Number.isInteger(canvasDoc.data?.windowId)
-          ? canvasDoc.data.windowId
-          : undefined;
+
+        // Legacy documents may still carry a windowId from an older version of
+        // this extension. It's another machine's id as often as not, so it is
+        // only honoured on explicit request and never written back.
+        const legacyWindowId = options.restoreWindow === true && Number.isInteger(canvasDoc.data?.windowId)
+          ? { windowId: canvasDoc.data.windowId }
+          : {};
+        const sessionOptions = options.restoreSession === false
+          ? {}
+          : await this.buildSessionCreateOptions(canvasDoc.id);
+
+        const createOptions = { ...baseOptions, ...legacyWindowId, ...sessionOptions };
 
         let tab;
-        if (preferredWindowId !== undefined) {
-          try {
-            tab = await this.openTab(canvasDoc.data.url, { ...baseOptions, windowId: preferredWindowId });
-          } catch (err) {
-            console.warn('Failed to open tab in preferred window, retrying without windowId:', err?.message || err);
-            tab = await this.openTab(canvasDoc.data.url, baseOptions);
-          }
-        } else {
+        try {
+          tab = await this.openTab(canvasDoc.data.url, createOptions);
+        } catch (err) {
+          // Placement is best-effort: a stale window or an out-of-range index
+          // must degrade to a plain open, never to a failed open.
+          console.warn('Failed to open tab with restored placement, retrying plain:', err?.message || err);
           tab = await this.openTab(canvasDoc.data.url, baseOptions);
         }
 
         // Mark as synced immediately to prevent auto-sync
         this.markTabAsSynced(tab.id, canvasDoc.id, canvasDoc.data?.url);
+
+        // Mute and grouping can't be passed to create()
+        if (options.restoreSession !== false) {
+          await this.applySessionStateAfterCreate(tab.id, canvasDoc.id);
+        }
 
         console.log(`Canvas document opened successfully: ${canvasDoc.data.title}`);
         return {
@@ -1019,11 +1127,31 @@ export class TabManager {
 
         try {
           this.markUrlAsPendingFromCanvas(item.document.data.url);
-          const tab = await this.openTab(item.document.data.url, {
+
+          // This is the path a context switch re-opens through, so it is where
+          // restoring placement matters most. Best-effort per tab: recorded
+          // indexes shift each other when a batch opens concurrently, and a
+          // plain open is always an acceptable outcome.
+          const baseOptions = {
             active: options.active !== false,
             pinned: item.document.data.pinned || false
-          });
+          };
+          const sessionOptions = options.restoreSession === false
+            ? {}
+            : await this.buildSessionCreateOptions(item.document.id);
+
+          let tab;
+          try {
+            tab = await this.openTab(item.document.data.url, { ...baseOptions, ...sessionOptions });
+          } catch (placementError) {
+            console.warn('Failed to open tab with restored placement, retrying plain:', placementError?.message || placementError);
+            tab = await this.openTab(item.document.data.url, baseOptions);
+          }
+
           this.markTabAsSynced(tab.id, item.document.id, item.document.data?.url);
+          if (options.restoreSession !== false) {
+            await this.applySessionStateAfterCreate(tab.id, item.document.id);
+          }
           return { document: item.document, result: { success: true, tab, message: 'Canvas document opened' } };
         } catch (error) {
           return { document: item.document, result: { success: false, error: error.message } };

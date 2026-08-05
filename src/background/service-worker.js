@@ -8,6 +8,7 @@ import { tabManager } from './modules/tab-manager.js';
 import { syncEngine } from './modules/sync-engine.js';
 import { contextIntegration } from './modules/context-integration.js';
 import { broadcastToast, notifySyncError, queueSyncSuccess, reportSyncSuccess } from './modules/toast-bridge.js';
+import { applyDocumentEventToCache } from './modules/documents-cache.js';
 
 console.log('🚀 Canvas Extension Service Worker loaded and starting...');
 console.log('🚀 Service Worker: Registering tab event listeners...');
@@ -331,6 +332,8 @@ function setupWebSocketEventHandlers() {
 
   webSocketClient.on('context.changed', (data) => {
     console.log('Context changed via WebSocket:', data);
+    // The whole result set moves — drop the cached pages rather than patch them.
+    void applyDocumentEventToCache('context.changed', data);
     // Refresh tabs when context changes
     refreshTabLists();
     broadcastToPopup('context.changed', data);
@@ -339,6 +342,7 @@ function setupWebSocketEventHandlers() {
   // Context URL set events (from CLI commands like 'context set /path')
   webSocketClient.on('context.url.set', (data) => {
     console.log('Context URL set via WebSocket:', data);
+    void applyDocumentEventToCache('context.url.set', data);
     // Refresh tabs when context URL changes
     refreshTabLists();
     broadcastToPopup('context.url.set', data);
@@ -359,6 +363,9 @@ function setupWebSocketEventHandlers() {
   const refreshPopupOnDocumentEvent = (eventType) => {
     webSocketClient.on(eventType, (data) => {
       console.log(`WebSocket document event: ${eventType}`, data);
+      // Keep the popup's document cache current while it is closed — that is
+      // what makes the next open a storage read rather than a refetch.
+      void applyDocumentEventToCache(eventType, data);
       broadcastToPopup(eventType, data);
     });
   };
@@ -384,48 +391,23 @@ function setupWebSocketEventHandlers() {
     'workspace.documents.deleted'
   ].forEach(refreshPopupOnDocumentEvent);
 
-  // Workspace tree changes
-  webSocketClient.on('workspace.tree.updated', (data) => {
-    console.log('Workspace tree updated:', data);
-    scheduleContextMenusSetup();
-    broadcastToPopup('workspace.tree.updated', data);
-  });
-
-  webSocketClient.on('workspace.tree.created', (data) => {
-    console.log('Workspace tree node created:', data);
-    scheduleContextMenusSetup();
-    broadcastToPopup('workspace.tree.created', data);
-  });
-
-  webSocketClient.on('workspace.tree.deleted', (data) => {
-    console.log('Workspace tree node deleted:', data);
-    scheduleContextMenusSetup();
-    broadcastToPopup('workspace.tree.deleted', data);
-  });
-
-  webSocketClient.on('workspace.tree.renamed', (data) => {
-    console.log('Workspace tree node renamed:', data);
-    scheduleContextMenusSetup();
-    broadcastToPopup('workspace.tree.renamed', data);
-  });
-
-  // Directory-specific events
-  webSocketClient.on('directory.created', (data) => {
-    console.log('Directory created:', data);
-    scheduleContextMenusSetup();
-    broadcastToPopup('directory.created', data);
-  });
-
-  webSocketClient.on('directory.deleted', (data) => {
-    console.log('Directory deleted:', data);
-    scheduleContextMenusSetup();
-    broadcastToPopup('directory.deleted', data);
-  });
-
-  webSocketClient.on('directory.renamed', (data) => {
-    console.log('Directory renamed:', data);
-    scheduleContextMenusSetup();
-    broadcastToPopup('directory.renamed', data);
+  // Workspace tree and directory changes. The cached tree is small and rarely
+  // touched, so these just drop it rather than trying to patch a node in place.
+  [
+    'workspace.tree.updated',
+    'workspace.tree.created',
+    'workspace.tree.deleted',
+    'workspace.tree.renamed',
+    'directory.created',
+    'directory.deleted',
+    'directory.renamed'
+  ].forEach((eventType) => {
+    webSocketClient.on(eventType, (data) => {
+      console.log(`Tree event: ${eventType}`, data);
+      void browserStorage.clearTreeCache();
+      scheduleContextMenusSetup();
+      broadcastToPopup(eventType, data);
+    });
   });
 }
 
@@ -1298,8 +1280,11 @@ async function handleDisconnect(sendResponse) {
     // Clear user info
     await browserStorage.setUserInfo(null);
 
-    // Cached documents belong to the session that fetched them
+    // Cached documents and trees belong to the session that fetched them, and
+    // tab session state is keyed by this server's document ids.
     await browserStorage.clearDocumentsCache();
+    await browserStorage.clearTreeCache();
+    await browserStorage.clearTabSessionState();
 
     // Disconnect WebSocket if connected
     if (webSocketClient.isConnected()) {
@@ -2072,6 +2057,9 @@ async function handleSaveSettings(data, sendResponse) {
         await browserStorage.setSyncMode('explorer');
         await browserStorage.setUserInfo(null);
         await browserStorage.clearDocumentsCache();
+        await browserStorage.clearTreeCache();
+        // Document ids are per-server; another server's ids would collide.
+        await browserStorage.clearTabSessionState();
       }
 
       await browserStorage.setConnectionSettings(data.connectionSettings);

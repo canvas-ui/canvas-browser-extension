@@ -909,36 +909,45 @@ function currentServerUrl() {
   return currentConnection.settings?.serverUrl || null;
 }
 
-// Everything that determines the result set goes into the key. In context mode
+// Everything that determines the result set goes into the scope. In context mode
 // that includes the context's url — the same context id pointed at a different
 // path is a different set of documents, and rendering one for the other would
-// be a cross-scope leak.
-function currentCanvasCacheKey() {
+// be a cross-scope leak. The scope is stored on the entry too, so the service
+// worker can match live events to it without parsing keys.
+function currentCanvasCacheScope() {
   if (!currentConnection.connected) return null;
 
-  const page = { offset: canvasPagination.offset, limit: canvasPagination.limit };
-
   if (currentConnection.mode === 'context' && currentConnection.context?.id) {
-    return browserStorage.documentsCacheKey({
+    return {
       mode: 'context',
-      contextId: currentConnection.context.id,
-      workspacePath: currentConnection.context.url || '/',
-      ...page
-    });
+      id: currentConnection.context.id,
+      path: currentConnection.context.url || '/'
+    };
   }
 
   if (currentConnection.mode === 'explorer' && currentConnection.workspace) {
     const workspaceId = currentConnection.workspace.id || currentConnection.workspace.name;
     if (!workspaceId) return null;
-    return browserStorage.documentsCacheKey({
+    return {
       mode: 'explorer',
-      workspaceId,
-      workspacePath: currentWorkspacePath || '/',
-      ...page
-    });
+      id: workspaceId,
+      path: currentWorkspacePath || '/'
+    };
   }
 
   return null;
+}
+
+function currentCanvasCacheKey(scope = currentCanvasCacheScope()) {
+  if (!scope) return null;
+  return browserStorage.documentsCacheKey({
+    mode: scope.mode,
+    contextId: scope.mode === 'context' ? scope.id : null,
+    workspaceId: scope.mode === 'explorer' ? scope.id : null,
+    workspacePath: scope.path,
+    offset: canvasPagination.offset,
+    limit: canvasPagination.limit
+  });
 }
 
 async function readCachedCanvasDocuments() {
@@ -955,7 +964,8 @@ async function readCachedCanvasDocuments() {
 async function writeCanvasDocumentsCache(response) {
   try {
     if (!response?.success || response.idsOnly) return;
-    const key = currentCanvasCacheKey();
+    const scope = currentCanvasCacheScope();
+    const key = currentCanvasCacheKey(scope);
     if (!key) return;
     await browserStorage.setCachedDocuments(key, {
       documents: response.documents || [],
@@ -963,7 +973,8 @@ async function writeCanvasDocumentsCache(response) {
       totalCount: response.totalCount,
       offset: response.offset ?? canvasPagination.offset,
       limit: response.limit ?? canvasPagination.limit,
-      serverUrl: currentServerUrl()
+      serverUrl: currentServerUrl(),
+      scope
     });
   } catch (error) {
     console.warn('Documents cache write failed:', error);
@@ -974,6 +985,11 @@ async function writeCanvasDocumentsCache(response) {
 // compare. On a match nothing re-renders; on any difference we re-fetch the page
 // (200 docs is one small response — cheaper than plumbing per-document hydration).
 async function revalidateCanvasDocuments(cached) {
+  // The service worker saw a change it couldn't patch precisely. An id-list
+  // check would call a content-only change (a retitled tab) "unchanged", so
+  // this one goes straight to a full fetch.
+  if (cached.stale) return await fetchCurrentDocumentList();
+
   const idsResponse = await fetchCurrentDocumentList({ idsOnly: true });
 
   // Not an idsOnly response — an older server ignored the param and sent the
@@ -2110,16 +2126,40 @@ async function navigateToTreeView() {
   navigateToView('tree');
 }
 
+// The tree is scoped by what produced it, not by path — one tree per context or
+// workspace.
+function currentTreeCacheKey() {
+  if (currentConnection.mode === 'context' && currentConnection.context?.id) {
+    return `context:${currentConnection.context.id}`;
+  }
+  if (currentConnection.mode === 'explorer' && currentConnection.workspace) {
+    const wsId = currentConnection.workspace.name || currentConnection.workspace.id;
+    return wsId ? `workspace:${wsId}` : null;
+  }
+  return null;
+}
+
 async function initializeTreeView() {
   console.log('Initializing tree view...');
 
+  const cacheKey = currentTreeCacheKey();
+
   try {
+    // Same treatment as the documents list: render the last tree we saw before
+    // the request goes out, so opening the view never starts on "Loading tree…".
+    if (cacheKey) {
+      const cachedTree = await browserStorage.getCachedTree(cacheKey, currentServerUrl());
+      if (cachedTree) {
+        treeData = cachedTree;
+        renderTreeView();
+      }
+    }
+
     // Load tree data from API
     if (currentConnection.mode === 'context' && currentConnection.context) {
       const response = await sendMessageToBackground('GET_CONTEXT_TREE', { contextId: currentConnection.context.id });
       if (response.success) {
-        treeData = response.tree;
-        renderTreeView();
+        applyFreshTree(response.tree, cacheKey);
       } else {
         throw new Error(response.error || 'Failed to load context tree');
       }
@@ -2127,18 +2167,31 @@ async function initializeTreeView() {
       const wsId = currentConnection.workspace.name || currentConnection.workspace.id;
       const response = await sendMessageToBackground('GET_WORKSPACE_TREE', { workspaceIdOrName: wsId });
       if (response.success) {
-        treeData = response.tree;
-        renderTreeView();
+        applyFreshTree(response.tree, cacheKey);
       } else {
         throw new Error(response.error || 'Failed to load workspace tree');
       }
     }
   } catch (error) {
+    // A cached tree already on screen beats replacing it with an error.
+    if (treeData) {
+      console.warn('Tree refresh failed, keeping cached tree:', error);
+      return;
+    }
     console.error('Failed to initialize tree view:', error);
     const errorDiv = createSecureElement('div', { className: 'empty-state' }, `Failed to load tree: ${error.message}`);
     treeContainer.textContent = '';
     treeContainer.appendChild(errorDiv);
   }
+}
+
+// Re-render only when the tree actually moved — a cached tree that matches is
+// already on screen, and re-rendering it would collapse the user's expansions.
+function applyFreshTree(tree, cacheKey) {
+  const changed = JSON.stringify(tree) !== JSON.stringify(treeData);
+  treeData = tree;
+  if (changed) renderTreeView();
+  if (cacheKey) void browserStorage.setCachedTree(cacheKey, tree, currentServerUrl());
 }
 
 function renderTreeView() {

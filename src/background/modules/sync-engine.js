@@ -1084,6 +1084,10 @@ export class SyncEngine {
     const tabsToUnload = Array.isArray(tabs) ? tabs.filter(Boolean) : [];
     if (tabsToUnload.length === 0) return;
 
+    // Last moment their placement still exists — record it so switching back
+    // can restore window, position, mute and group.
+    await tabManager.captureTabSessionState(tabsToUnload);
+
     if ((syncSettings?.contextUnloadBehavior || 'close') !== 'close') {
       const result = await tabManager.unloadTabs(tabsToUnload, syncSettings);
       console.log('SyncEngine: Unloaded tabs for context change:', result);

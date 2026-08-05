@@ -30,7 +30,9 @@ export class BrowserStorage {
       PINNED_TABS: 'canvasPinnedTabs',
       USER_INFO: 'canvasUserInfo',
       RECENT_DESTINATIONS: 'canvasRecentDestinations',
-      CANVAS_DOCUMENTS_CACHE: 'canvasDocumentsCache'
+      CANVAS_DOCUMENTS_CACHE: 'canvasDocumentsCache',
+      CANVAS_TREE_CACHE: 'canvasTreeCache',
+      TAB_SESSION_STATE: 'canvasTabSessionState'
     };
 
     // Documents cache bounds. storage.local is 10 MB by default and we stay
@@ -38,6 +40,12 @@ export class BrowserStorage {
     // capped by entry count and age rather than measured bytes.
     this.DOCUMENTS_CACHE_MAX_ENTRIES = 20;
     this.DOCUMENTS_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
+
+    // Tab session state is tiny per entry (five numbers) but accumulates one
+    // entry per document ever restored, so it gets a longer life and a higher
+    // cap than the document cache.
+    this.TAB_SESSION_STATE_MAX_ENTRIES = 500;
+    this.TAB_SESSION_STATE_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 
     // Default values
     this.DEFAULTS = {
@@ -72,7 +80,9 @@ export class BrowserStorage {
       [this.KEYS.PINNED_TABS]: [],
       [this.KEYS.USER_INFO]: null, // { id, name, email, userType, status }
       [this.KEYS.RECENT_DESTINATIONS]: [], // Array of recent destinations: [{ id, title, type: 'workspace'|'context', workspaceName?, contextSpec?, timestamp }]
-      [this.KEYS.CANVAS_DOCUMENTS_CACHE]: {} // { [scopeKey]: { documents, count, totalCount, offset, limit, fetchedAt, serverUrl } }
+      [this.KEYS.CANVAS_DOCUMENTS_CACHE]: {}, // { [scopeKey]: { documents, count, totalCount, offset, limit, fetchedAt, serverUrl } }
+      [this.KEYS.CANVAS_TREE_CACHE]: {}, // { [treeKey]: { tree, fetchedAt, serverUrl } }
+      [this.KEYS.TAB_SESSION_STATE]: {} // { [documentId]: { windowId, index, muted, active, groupId, updatedAt } }
     };
   }
 
@@ -300,7 +310,7 @@ export class BrowserStorage {
     return entry;
   }
 
-  async setCachedDocuments(key, { documents = [], count, totalCount, offset, limit, serverUrl } = {}) {
+  async setCachedDocuments(key, { documents = [], count, totalCount, offset, limit, serverUrl, scope } = {}) {
     if (!key) return false;
     const cache = await this.getDocumentsCache();
 
@@ -311,7 +321,14 @@ export class BrowserStorage {
       offset: offset ?? 0,
       limit: limit ?? documents.length,
       fetchedAt: Date.now(),
-      serverUrl: serverUrl || null
+      serverUrl: serverUrl || null,
+      // Scope components are kept alongside the key so the service worker can
+      // match live events to entries without parsing keys back apart.
+      scope: scope || null,
+      // Set when an event told us the entry moved but not precisely enough to
+      // patch it. Still rendered on open — but revalidated in full, since an
+      // id-list check would call a content-only change "unchanged".
+      stale: false
     };
 
     return await this.setDocumentsCache(this.pruneDocumentsCache(cache));
@@ -329,6 +346,84 @@ export class BrowserStorage {
 
   async clearDocumentsCache() {
     return await this.set(this.KEYS.CANVAS_DOCUMENTS_CACHE, {});
+  }
+
+  // Tree cache. Same cold-open problem as the documents list ("Loading tree…"),
+  // but the tree changes rarely and is small, so it needs no patching — the
+  // service worker just drops it when a tree event says it moved.
+
+  async getCachedTree(key, serverUrl) {
+    if (!key) return null;
+    const cache = await this.get(this.KEYS.CANVAS_TREE_CACHE);
+    const entry = (cache && typeof cache === 'object') ? cache[key] : null;
+    if (!entry?.tree) return null;
+    if (serverUrl && entry.serverUrl !== serverUrl) return null;
+    if (!Number.isFinite(entry.fetchedAt) || (Date.now() - entry.fetchedAt) > this.DOCUMENTS_CACHE_TTL_MS) return null;
+    return entry.tree;
+  }
+
+  async setCachedTree(key, tree, serverUrl) {
+    if (!key || !tree) return false;
+    const cache = await this.get(this.KEYS.CANVAS_TREE_CACHE) || {};
+    cache[key] = { tree, fetchedAt: Date.now(), serverUrl: serverUrl || null };
+
+    // One tree per scope, and few scopes — the entry cap alone keeps this bounded.
+    const trimmed = Object.entries(cache)
+      .sort((a, b) => (b[1]?.fetchedAt || 0) - (a[1]?.fetchedAt || 0))
+      .slice(0, this.DOCUMENTS_CACHE_MAX_ENTRIES);
+    return await this.set(this.KEYS.CANVAS_TREE_CACHE, Object.fromEntries(trimmed));
+  }
+
+  async clearTreeCache() {
+    return await this.set(this.KEYS.CANVAS_TREE_CACHE, {});
+  }
+
+  // Tab session state (local only, keyed by document id)
+  //
+  // Where a tab sat — window, position, mute, group — so a context switch back
+  // can put it back. This is per-browser-session state and deliberately NOT part
+  // of the synced document: window ids are per-machine and unstable across
+  // restarts, and pushing them to the server would hand one machine's ids to
+  // every other client. Only `pinned` belongs in the document; it's a property
+  // of the bookmark, not of a session.
+  //
+  // Small per entry but unbounded over time, so it gets the same treatment as
+  // the document cache: capped and aged out.
+
+  async getTabSessionStates() {
+    const states = await this.get(this.KEYS.TAB_SESSION_STATE);
+    return (states && typeof states === 'object' && !Array.isArray(states)) ? states : {};
+  }
+
+  async getTabSessionState(documentId) {
+    if (documentId === undefined || documentId === null) return null;
+    const states = await this.getTabSessionStates();
+    const entry = states[String(documentId)];
+    if (!entry) return null;
+    if (!Number.isFinite(entry.updatedAt) || (Date.now() - entry.updatedAt) > this.TAB_SESSION_STATE_TTL_MS) return null;
+    return entry;
+  }
+
+  // entries: [{ documentId, state: { windowId, index, muted, active, groupId } }]
+  async recordTabSessionStates(entries = []) {
+    const usable = entries.filter(entry => entry?.documentId != null && entry.state);
+    if (usable.length === 0) return false;
+
+    const states = await this.getTabSessionStates();
+    for (const { documentId, state } of usable) {
+      states[String(documentId)] = { ...state, updatedAt: Date.now() };
+    }
+
+    const pruned = Object.entries(states)
+      .filter(([, entry]) => Number.isFinite(entry?.updatedAt) && (Date.now() - entry.updatedAt) <= this.TAB_SESSION_STATE_TTL_MS)
+      .sort((a, b) => b[1].updatedAt - a[1].updatedAt)
+      .slice(0, this.TAB_SESSION_STATE_MAX_ENTRIES);
+
+    return await this.set(this.KEYS.TAB_SESSION_STATE, Object.fromEntries(pruned));
+  }
+
+  async clearTabSessionState() {
+    return await this.set(this.KEYS.TAB_SESSION_STATE, {});
   }
 
   // Browser Identity
