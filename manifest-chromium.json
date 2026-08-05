@@ -38,7 +38,7 @@
   },
 
   "side_panel": {
-    "default_path": "popup/popup.html"
+    "default_path": "popup/popup.html?host=panel"
   },
 
   "icons": {

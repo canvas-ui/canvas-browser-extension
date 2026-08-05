@@ -130,18 +130,18 @@ document.addEventListener('DOMContentLoaded', async () => {
 });
 
 function isPopupView() {
-  try {
-    const ext = (typeof browser !== 'undefined' && browser.extension) ? browser.extension : chrome.extension;
-    if (ext?.getViews) {
-      const popups = ext.getViews({ type: 'popup' });
-      return Array.isArray(popups) && popups.includes(window);
-    }
-  } catch {
-    // ignore
-  }
-
-  // Fallback: our popup is fixed-size; side panel/sidebar typically isn't.
-  return window.innerWidth <= 520 && window.innerHeight <= 720;
+  // The side panel (Chromium) and sidebar (Firefox) load this same page with
+  // ?host=panel — see side_panel/sidebar_action in the manifests and the path
+  // passed to sidePanel.setOptions in handleDockClick(). Everything else is the
+  // toolbar popup.
+  //
+  // Do not fall back to measuring the window: the popup auto-sizes to its
+  // content, and the content is 300% wide until the popup sizing is applied, so
+  // a measurement here just reports whatever an earlier misdetection produced and
+  // then locks it in. chrome.extension.getViews({type:'popup'}) is likewise not
+  // dependable under MV3, which is what let the panel layout leak into the
+  // popup and show all three views at once.
+  return new URLSearchParams(window.location.search).get('host') !== 'panel';
 }
 
 function closePopupIfPossible() {
@@ -1483,7 +1483,7 @@ async function handleDockClick() {
       const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
 
       if (chrome.sidePanel?.setOptions && activeTab?.id != null) {
-        await chrome.sidePanel.setOptions({ tabId: activeTab.id, path: 'popup/popup.html', enabled: true });
+        await chrome.sidePanel.setOptions({ tabId: activeTab.id, path: 'popup/popup.html?host=panel', enabled: true });
       }
 
       if (activeTab?.id != null) {

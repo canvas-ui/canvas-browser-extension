@@ -37,7 +37,7 @@
   },
 
   "sidebar_action": {
-    "default_panel": "popup/popup.html",
+    "default_panel": "popup/popup.html?host=panel",
     "default_title": "Canvas Browser Extension",
     "default_icon": {
       "64": "assets/icons/logo-wr_64x64.png",

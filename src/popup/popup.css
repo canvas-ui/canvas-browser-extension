@@ -15,7 +15,11 @@ body {
   overflow: hidden;
 }
 
-/* Explicit sizing: popup is fixed, side panel/sidebar is fluid */
+/* Explicit sizing: popup is fixed, side panel/sidebar is fluid.
+   Popup sizing is also the default, so a window that never gets tagged still
+   renders correctly: .view-container is 300% wide, and an unconstrained popup
+   auto-sizes to its content, which lays all three views out side by side. */
+body,
 body[data-host="popup"] {
   width: 452px;
   min-width: 452px;
