@@ -7,6 +7,15 @@
   box-sizing: border-box;
 }
 
+/* Required for body's overflow to clip anything at all. With no overflow set
+   here, the spec propagates body's overflow to the viewport and body's own used
+   value becomes `visible` — so .view-container (300% wide, by design, for the
+   slide transition) spills out and the popup window auto-sizes to all three
+   views side by side. Setting it on the root stops the propagation. */
+html {
+  overflow: hidden;
+}
+
 body {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif;
   font-size: 14px;
