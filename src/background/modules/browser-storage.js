@@ -29,8 +29,15 @@ export class BrowserStorage {
       TRACKED_CANVAS_TABS: 'canvasTrackedCanvasTabs',
       PINNED_TABS: 'canvasPinnedTabs',
       USER_INFO: 'canvasUserInfo',
-      RECENT_DESTINATIONS: 'canvasRecentDestinations'
+      RECENT_DESTINATIONS: 'canvasRecentDestinations',
+      CANVAS_DOCUMENTS_CACHE: 'canvasDocumentsCache'
     };
+
+    // Documents cache bounds. storage.local is 10 MB by default and we stay
+    // inside it deliberately (no unlimitedStorage permission), so the cache is
+    // capped by entry count and age rather than measured bytes.
+    this.DOCUMENTS_CACHE_MAX_ENTRIES = 20;
+    this.DOCUMENTS_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
 
     // Default values
     this.DEFAULTS = {
@@ -64,7 +71,8 @@ export class BrowserStorage {
       // Stored as array in browser storage (Set can't be serialized)
       [this.KEYS.PINNED_TABS]: [],
       [this.KEYS.USER_INFO]: null, // { id, name, email, userType, status }
-      [this.KEYS.RECENT_DESTINATIONS]: [] // Array of recent destinations: [{ id, title, type: 'workspace'|'context', workspaceName?, contextSpec?, timestamp }]
+      [this.KEYS.RECENT_DESTINATIONS]: [], // Array of recent destinations: [{ id, title, type: 'workspace'|'context', workspaceName?, contextSpec?, timestamp }]
+      [this.KEYS.CANVAS_DOCUMENTS_CACHE]: {} // { [scopeKey]: { documents, count, totalCount, offset, limit, fetchedAt, serverUrl } }
     };
   }
 
@@ -236,6 +244,91 @@ export class BrowserStorage {
   async setTrackedCanvasTabs(trackedTabs) {
     const items = Array.isArray(trackedTabs) ? trackedTabs : [];
     return await this.set(this.KEYS.TRACKED_CANVAS_TABS, items);
+  }
+
+  // Canvas Documents Cache (stale-while-revalidate for the popup)
+  //
+  // The popup renders from this on open so first paint has rows before any
+  // server round-trip, then revalidates. Entries are keyed by everything that
+  // determines the result set — mode, context/workspace, path and the page
+  // window — so a context or path switch can never surface another scope's tabs.
+
+  documentsCacheKey({ mode, contextId, workspaceId, workspacePath, offset, limit } = {}) {
+    const scope = contextId || workspaceId || 'none';
+    const path = workspacePath || '/';
+    return `${mode || 'explorer'}:${scope}:${path}:${offset || 0}:${limit || 0}`;
+  }
+
+  // The popup only ever reads id/title/url/favIconUrl, so cache exactly that and
+  // drop featureArray/metadata/schema/checksums/timestamps — most of the bytes.
+  // `data:` favicons are skipped too (multi-KB for some sites); the renderer
+  // already falls back to a placeholder icon.
+  projectDocumentForCache(doc) {
+    if (!doc || doc.id === undefined || doc.id === null) return null;
+    const data = doc.data || {};
+    const favIconUrl = typeof data.favIconUrl === 'string' && !data.favIconUrl.startsWith('data:')
+      ? data.favIconUrl
+      : undefined;
+    return {
+      id: doc.id,
+      data: {
+        title: data.title,
+        url: data.url,
+        ...(favIconUrl ? { favIconUrl } : {})
+      }
+    };
+  }
+
+  async getDocumentsCache() {
+    const cache = await this.get(this.KEYS.CANVAS_DOCUMENTS_CACHE);
+    return (cache && typeof cache === 'object' && !Array.isArray(cache)) ? cache : {};
+  }
+
+  async setDocumentsCache(cache) {
+    return await this.set(this.KEYS.CANVAS_DOCUMENTS_CACHE, cache || {});
+  }
+
+  // Returns a usable entry or null. Entries from another server, or older than
+  // the TTL, are never rendered — a stale list is worse than a brief empty one.
+  async getCachedDocuments(key, serverUrl) {
+    if (!key) return null;
+    const cache = await this.getDocumentsCache();
+    const entry = cache[key];
+    if (!entry || !Array.isArray(entry.documents)) return null;
+    if (serverUrl && entry.serverUrl !== serverUrl) return null;
+    if (!Number.isFinite(entry.fetchedAt) || (Date.now() - entry.fetchedAt) > this.DOCUMENTS_CACHE_TTL_MS) return null;
+    return entry;
+  }
+
+  async setCachedDocuments(key, { documents = [], count, totalCount, offset, limit, serverUrl } = {}) {
+    if (!key) return false;
+    const cache = await this.getDocumentsCache();
+
+    cache[key] = {
+      documents: documents.map(doc => this.projectDocumentForCache(doc)).filter(Boolean),
+      count: count ?? documents.length,
+      totalCount: totalCount ?? documents.length,
+      offset: offset ?? 0,
+      limit: limit ?? documents.length,
+      fetchedAt: Date.now(),
+      serverUrl: serverUrl || null
+    };
+
+    return await this.setDocumentsCache(this.pruneDocumentsCache(cache));
+  }
+
+  // Drop expired entries, then the oldest ones over the entry cap.
+  pruneDocumentsCache(cache) {
+    const now = Date.now();
+    const entries = Object.entries(cache)
+      .filter(([, entry]) => Number.isFinite(entry?.fetchedAt) && (now - entry.fetchedAt) <= this.DOCUMENTS_CACHE_TTL_MS)
+      .sort((a, b) => b[1].fetchedAt - a[1].fetchedAt)
+      .slice(0, this.DOCUMENTS_CACHE_MAX_ENTRIES);
+    return Object.fromEntries(entries);
+  }
+
+  async clearDocumentsCache() {
+    return await this.set(this.KEYS.CANVAS_DOCUMENTS_CACHE, {});
   }
 
   // Browser Identity

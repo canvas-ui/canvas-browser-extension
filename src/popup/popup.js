@@ -1,6 +1,11 @@
 // Canvas Extension Popup JavaScript
 // Handles popup UI interactions and communication with background service worker
 
+// Shared storage layer. The popup reads the documents cache directly rather than
+// asking the service worker for it — waking an idle MV3 worker is exactly the
+// latency the cache exists to remove.
+import { browserStorage } from '../background/modules/browser-storage.js';
+
 // Import FuzzySearch for fuzzy search
 import FuzzySearch from './fuse.js';
 
@@ -759,12 +764,17 @@ async function loadTabs() {
   try {
     console.log('Loading tabs...');
 
-    const [allTabsResponse, docsResponse] = await Promise.all([
+    // First paint comes off local data only — browser tabs and the cached
+    // document page — so there are rows on screen before any network wait.
+    const [allTabsResponse, cached] = await Promise.all([
       sendMessageToBackground('GET_ALL_TABS'),
-      fetchCurrentDocumentList()
+      readCachedCanvasDocuments()
     ]);
     await resolveCurrentWindowId();
-    applyCanvasDocumentResponse(docsResponse);
+
+    if (cached) {
+      applyCanvasDocumentResponse({ success: true, ...cached });
+    }
 
     if (allTabsResponse.success) {
       rawBrowserTabs = allTabsResponse.tabs || [];
@@ -790,9 +800,37 @@ async function loadTabs() {
       console.error('Failed to get browser tabs:', allTabsResponse.error);
     }
 
-    if (docsResponse?.success) {
-      console.log('Canvas documents loaded:', canvasTabs.length, canvasPagination);
+    // Paint the cached page now; the server confirmation follows below.
+    if (cached) {
+      console.log('Canvas documents painted from cache:', canvasTabs.length, canvasPagination);
       renderCanvasTabs();
+      initializeFuseInstances();
+      setCanvasListStale(true);
+    }
+
+    const docsResponse = cached
+      ? await revalidateCanvasDocuments(cached)
+      : await fetchCurrentDocumentList();
+    setCanvasListStale(false);
+
+    if (docsResponse?.success) {
+      applyCanvasDocumentResponse(docsResponse);
+      if (docsResponse.unchanged) {
+        // The page on screen is confirmed current — re-rendering it would
+        // produce exactly the flash this cache exists to remove.
+        console.log('Canvas documents unchanged since last open');
+      } else {
+        console.log('Canvas documents loaded:', canvasTabs.length, canvasPagination);
+        markSyncedBrowserTabs(canvasTabs);
+        updateBrowserTabsFilter();
+        renderBrowserTabs();
+        renderCanvasTabs();
+        void writeCanvasDocumentsCache(docsResponse);
+      }
+    } else if (cached) {
+      // Server unreachable with cached rows already on screen: keep them. A
+      // possibly-stale list beats blanking a pane the user is looking at.
+      console.warn('Canvas documents refresh failed, keeping cached page:', docsResponse?.error);
     } else if (currentConnection.connected) {
       console.error('Failed to get Canvas documents:', docsResponse?.error);
       canvasTabs = [];
@@ -812,6 +850,7 @@ async function loadTabs() {
     }
   } catch (error) {
     console.error('Failed to load tabs:', error);
+    setCanvasListStale(false);
   } finally {
     const durationMs = Math.round(performance.now() - startedAt);
     const requestCount = popupRequestStats.count - requestCountBefore;
@@ -836,14 +875,15 @@ async function resolveCurrentWindowId() {
   } catch { /* leave null */ }
 }
 
-async function fetchCurrentDocumentList() {
+async function fetchCurrentDocumentList(options = {}) {
   if (!currentConnection.connected) {
     return { success: true, documents: [] };
   }
 
   const request = {
     limit: canvasPagination.limit,
-    offset: canvasPagination.offset
+    offset: canvasPagination.offset,
+    ...(options.idsOnly ? { idsOnly: true } : {})
   };
 
   if (currentConnection.mode === 'context' && currentConnection.context) {
@@ -855,6 +895,117 @@ async function fetchCurrentDocumentList() {
   }
 
   return { success: true, documents: [] };
+}
+
+/**
+ * Documents cache (stale-while-revalidate)
+ *
+ * The popup document is torn down on close, so without this every open starts
+ * from an empty pane and waits on a server round-trip. We keep the last page in
+ * storage.local, paint it immediately, then confirm it against the server.
+ */
+
+function currentServerUrl() {
+  return currentConnection.settings?.serverUrl || null;
+}
+
+// Everything that determines the result set goes into the key. In context mode
+// that includes the context's url — the same context id pointed at a different
+// path is a different set of documents, and rendering one for the other would
+// be a cross-scope leak.
+function currentCanvasCacheKey() {
+  if (!currentConnection.connected) return null;
+
+  const page = { offset: canvasPagination.offset, limit: canvasPagination.limit };
+
+  if (currentConnection.mode === 'context' && currentConnection.context?.id) {
+    return browserStorage.documentsCacheKey({
+      mode: 'context',
+      contextId: currentConnection.context.id,
+      workspacePath: currentConnection.context.url || '/',
+      ...page
+    });
+  }
+
+  if (currentConnection.mode === 'explorer' && currentConnection.workspace) {
+    const workspaceId = currentConnection.workspace.id || currentConnection.workspace.name;
+    if (!workspaceId) return null;
+    return browserStorage.documentsCacheKey({
+      mode: 'explorer',
+      workspaceId,
+      workspacePath: currentWorkspacePath || '/',
+      ...page
+    });
+  }
+
+  return null;
+}
+
+async function readCachedCanvasDocuments() {
+  try {
+    const key = currentCanvasCacheKey();
+    if (!key) return null;
+    return await browserStorage.getCachedDocuments(key, currentServerUrl());
+  } catch (error) {
+    console.warn('Documents cache read failed:', error);
+    return null;
+  }
+}
+
+async function writeCanvasDocumentsCache(response) {
+  try {
+    if (!response?.success || response.idsOnly) return;
+    const key = currentCanvasCacheKey();
+    if (!key) return;
+    await browserStorage.setCachedDocuments(key, {
+      documents: response.documents || [],
+      count: response.count,
+      totalCount: response.totalCount,
+      offset: response.offset ?? canvasPagination.offset,
+      limit: response.limit ?? canvasPagination.limit,
+      serverUrl: currentServerUrl()
+    });
+  } catch (error) {
+    console.warn('Documents cache write failed:', error);
+  }
+}
+
+// Cheap confirmation that a cached page is still current: ask for ids only and
+// compare. On a match nothing re-renders; on any difference we re-fetch the page
+// (200 docs is one small response — cheaper than plumbing per-document hydration).
+async function revalidateCanvasDocuments(cached) {
+  const idsResponse = await fetchCurrentDocumentList({ idsOnly: true });
+
+  // Not an idsOnly response — an older server ignored the param and sent the
+  // documents themselves, which is a perfectly good full result.
+  if (!idsResponse?.success || !idsResponse.idsOnly) return idsResponse;
+
+  const cachedIds = (cached.documents || []).map(doc => String(doc.id));
+  const freshIds = (idsResponse.ids || []).map(id => String(id));
+  const unchanged = cachedIds.length === freshIds.length &&
+    cachedIds.every((id, index) => id === freshIds[index]);
+
+  if (unchanged) {
+    // Same page, but totalCount can still have moved (documents added beyond
+    // this window), so carry the fresh counts through for the pager.
+    return {
+      success: true,
+      unchanged: true,
+      documents: cached.documents || [],
+      count: idsResponse.count,
+      totalCount: idsResponse.totalCount,
+      offset: cached.offset,
+      limit: cached.limit
+    };
+  }
+
+  return await fetchCurrentDocumentList();
+}
+
+// Subtle affordance only: rows are already on screen, so this must not read as
+// a loading state.
+function setCanvasListStale(stale) {
+  canvasToBrowserList?.classList.toggle('revalidating', stale);
 }
 
 function applyCanvasDocumentResponse(response) {
@@ -887,10 +1038,32 @@ function normalizeCanvasFetchLimit(value) {
 async function loadCanvasPage(offset) {
   canvasPagination.offset = Math.max(0, offset);
   selectedCanvasTabs.clear();
-  const response = await fetchCurrentDocumentList();
+
+  // Paging back to a page we already hold renders it immediately; the
+  // revalidation below still confirms it against the server.
+  const cached = await readCachedCanvasDocuments();
+  if (cached) {
+    applyCanvasDocumentResponse({ success: true, ...cached });
+    renderCanvasTabs();
+    initializeFuseInstances();
+    updateTabCountHeaders();
+    setCanvasListStale(true);
+  }
+
+  const response = cached
+    ? await revalidateCanvasDocuments(cached)
+    : await fetchCurrentDocumentList();
+  setCanvasListStale(false);
+
   applyCanvasDocumentResponse(response);
   if (!response.success) {
     showToast(`Failed to load Canvas tabs: ${response.error}`, 'error');
+  } else if (!response.unchanged) {
+    void writeCanvasDocumentsCache(response);
+  }
+  if (cached && response.success && response.unchanged) {
+    updateTabCountHeaders();
+    return;
   }
   renderCanvasTabs();
   initializeFuseInstances();

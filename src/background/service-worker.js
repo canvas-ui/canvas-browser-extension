@@ -1298,6 +1298,9 @@ async function handleDisconnect(sendResponse) {
     // Clear user info
     await browserStorage.setUserInfo(null);
 
+    // Cached documents belong to the session that fetched them
+    await browserStorage.clearDocumentsCache();
+
     // Disconnect WebSocket if connected
     if (webSocketClient.isConnected()) {
       webSocketClient.disconnect();
@@ -2068,6 +2071,7 @@ async function handleSaveSettings(data, sendResponse) {
         await browserStorage.setWorkspacePath('/');
         await browserStorage.setSyncMode('explorer');
         await browserStorage.setUserInfo(null);
+        await browserStorage.clearDocumentsCache();
       }
 
       await browserStorage.setConnectionSettings(data.connectionSettings);
@@ -2077,6 +2081,9 @@ async function handleSaveSettings(data, sendResponse) {
     // Save sync settings
     if (data.syncSettings) {
       await browserStorage.setSyncSettings(data.syncSettings);
+      // These shape the document query (browser-scoped tag filter, fetch limit,
+      // tree preference) — cached pages may no longer match it.
+      await browserStorage.clearDocumentsCache();
       console.log('Sync settings saved');
     }
 
@@ -2159,6 +2166,10 @@ async function handleSetSyncSettings(data, sendResponse) {
     // Save sync settings to storage (data is the partial settings object)
     await browserStorage.setSyncSettings(data);
 
+    // Sync settings shape the document query itself (browser-scoped tag filter,
+    // fetch limit, tree preference), so any cached page may no longer match.
+    await browserStorage.clearDocumentsCache();
+
     // Verify settings were saved
     const verifySettings = await browserStorage.getSyncSettings();
     console.log('Sync settings saved and verified:', verifySettings);
@@ -2217,15 +2228,22 @@ async function handleGetCanvasDocuments(data, sendResponse) {
 
     const limit = normalizeCanvasFetchLimit(data?.limit);
     const offset = normalizeCanvasFetchOffset(data?.offset);
+    const idsOnly = data?.idsOnly === true;
 
     // Fetch Canvas documents with tab schema filter
     const featureArray = ['data/schema/tab'];
-    const response = await apiClient.getContextDocuments(contextId, featureArray, { limit, offset });
+    const response = await apiClient.getContextDocuments(contextId, featureArray, { limit, offset, idsOnly });
 
     if (response.status === 'success') {
       sendResponse({
         success: true,
-        documents: response.payload || [],
+        // With idsOnly the payload is an id array, not documents — the popup
+        // uses it to check whether its cached page is still current. A server
+        // that doesn't know the param sends documents anyway, so trust the
+        // shape on the wire rather than what we asked for.
+        ...(idsOnly && isDocumentIdPayload(response.payload)
+          ? { idsOnly: true, ids: response.payload || [], documents: [] }
+          : { documents: response.payload || [] }),
         count: response.count || 0,
         totalCount: response.totalCount || 0,
         limit,
@@ -2278,14 +2296,21 @@ async function handleGetWorkspaceDocuments(data, sendResponse) {
 
     const limit = normalizeCanvasFetchLimit(requestData.limit);
     const offset = normalizeCanvasFetchOffset(requestData.offset);
+    const idsOnly = requestData.idsOnly === true;
 
     // Fetch documents for workspace path
-    const response = await apiClient.getWorkspaceDocuments(wsIdOrName, contextSpec, ['data/schema/tab'], { limit, offset, treeNameOrTreeId: await browserStorage.getWorkspaceTreeRef() });
+    const response = await apiClient.getWorkspaceDocuments(wsIdOrName, contextSpec, ['data/schema/tab'], { limit, offset, idsOnly, treeNameOrTreeId: await browserStorage.getWorkspaceTreeRef() });
 
     if (response.status === 'success') {
       sendResponse({
         success: true,
-        documents: response.payload || [],
+        // With idsOnly the payload is an id array, not documents — the popup
+        // uses it to check whether its cached page is still current. A server
+        // that doesn't know the param sends documents anyway, so trust the
+        // shape on the wire rather than what we asked for.
+        ...(idsOnly && isDocumentIdPayload(response.payload)
+          ? { idsOnly: true, ids: response.payload || [], documents: [] }
+          : { documents: response.payload || [] }),
         count: response.count || 0,
         totalCount: response.totalCount || 0,
         limit,
@@ -2298,6 +2323,13 @@ async function handleGetWorkspaceDocuments(data, sendResponse) {
     console.error('Failed to get workspace documents:', error);
     sendResponse({ success: false, documents: [], error: error.message });
   }
+}
+
+// An idsOnly listing comes back as bare document ids. An empty array satisfies
+// both shapes, which is fine — empty is empty either way.
+function isDocumentIdPayload(payload) {
+  return Array.isArray(payload) &&
+    payload.every(entry => typeof entry === 'number' || typeof entry === 'string');
 }
 
 function normalizeCanvasFetchLimit(value) {

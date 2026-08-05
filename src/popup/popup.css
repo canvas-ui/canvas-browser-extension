@@ -673,6 +673,13 @@ body.disconnected .disconnected-badge {
   min-height: 0;
 }
 
+/* Cached rows shown while we confirm them against the server. Deliberately a
+   whisper, not a spinner — the point is that content is already on screen. */
+.tab-list.revalidating {
+  opacity: 0.85;
+  transition: opacity 120ms ease-out;
+}
+
 /* Window grouping (unsynced tabs per window) */
 .window-group {
   margin-bottom: 10px;

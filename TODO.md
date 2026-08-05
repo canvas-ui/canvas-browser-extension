@@ -25,7 +25,27 @@ is `storage.sync` only. Living inside 10 MB is what forces the projection and th
 eviction rules below, both of which we want regardless. Revisit only if a real
 measurement says otherwise; adding the permission also re-triggers store review.
 
-### Phase 1 — cache + revalidate on open
+### Phase 1 — cache + revalidate on open — **DONE**
+
+Landed as described below, with two corrections to the plan:
+
+- The `idsOnly` prerequisite was **not** in `listTreeDocuments()` — that helper is
+  directory-tree-only and neither route touches it. Both routes go
+  `Context.list()` / `Workspace.list()` → `SynapsD.list()` → **`SynapsD.rank()`**
+  (`synapsd/src/index.js`), which was the only place `parse` was honoured. The
+  option went there (covering `list`/`query`/`search` at once) plus
+  `parseSpec` (`synapsd/src/utils/spec.js`, options are whitelisted), and
+  `idsOnly` was added to both route querystrings. Measured on a 200-doc page:
+  2.49 MB → 1.5 KB. Covered by `synapsd/tests/list-ids-only.test.js`.
+- **Delta hydration was dropped.** There is no batch get-by-ids endpoint, and a
+  changed page is a single ≤200-doc fetch — the same one we already did. So
+  revalidation is: ids match → nothing; ids differ → re-fetch the page. Phase 2
+  makes even that rare.
+
+Also beyond the plan: revalidation failure with cached rows on screen keeps them
+rather than blanking the pane, and the service worker clears the cache whenever
+sync settings change (they shape the query itself — browser-scoped tag filter,
+fetch limit, tree preference — without changing the cache key).
 
 - Add `CANVAS_DOCUMENTS_CACHE: 'canvasDocumentsCache'` to `BrowserStorage.KEYS`
   (`browser-storage.js:20`), defaulting to `{}`, with `get/setDocumentsCache()`

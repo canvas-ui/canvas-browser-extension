@@ -679,6 +679,8 @@ Firefox blocks local network requests for security reasons.
     }
     if (Number.isFinite(options.limit)) params.set('limit', String(options.limit));
     if (Number.isFinite(options.offset)) params.set('offset', String(options.offset));
+    // Revalidation read: the payload comes back as document ids, not documents.
+    if (options.idsOnly) params.set('idsOnly', 'true');
 
     const query = params.toString();
     if (query) endpoint += `?${query}`;
@@ -786,6 +788,8 @@ Firefox blocks local network requests for security reasons.
     }
     if (Number.isFinite(options.limit)) params.set('limit', String(options.limit));
     if (Number.isFinite(options.offset)) params.set('offset', String(options.offset));
+    // Revalidation read: the payload comes back as document ids, not documents.
+    if (options.idsOnly) params.set('idsOnly', 'true');
     const query = params.toString();
     if (query) endpoint += `?${query}`;
 
