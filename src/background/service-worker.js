@@ -700,7 +700,7 @@ tabsAPI.onRemoved.addListener(async (tabId, removeInfo) => {
       if (!workspace?.id && !workspace?.name) return;
       const wsId = workspace.name || workspace.id;
       const workspacePath = await browserStorage.getWorkspacePath();
-      await apiClient.removeWorkspaceDocuments(wsId, [documentId], workspacePath || '/', ['data/abstraction/tab'], await browserStorage.getWorkspaceTreeRef());
+      await apiClient.removeWorkspaceDocuments(wsId, [documentId], workspacePath || '/', ['data/schema/tab'], await browserStorage.getWorkspaceTreeRef());
     }
   } catch (error) {
     // Non-fatal: we always prefer closing the browser tab over perfect remote state.
@@ -1985,7 +1985,7 @@ async function handleDeleteFromDatabase(data, sendResponse) {
       console.log('Deleting document from workspace:', wsId, 'path:', contextSpec, 'documentId:', document.id);
 
       // Delete from workspace/database
-      const response = await apiClient.deleteWorkspaceDocuments(wsId, [document.id], contextSpec, ['data/abstraction/tab'], await browserStorage.getWorkspaceTreeRef());
+      const response = await apiClient.deleteWorkspaceDocuments(wsId, [document.id], contextSpec, ['data/schema/tab'], await browserStorage.getWorkspaceTreeRef());
       result = { success: response.status === 'success', response };
     }
 
@@ -2219,7 +2219,7 @@ async function handleGetCanvasDocuments(data, sendResponse) {
     const offset = normalizeCanvasFetchOffset(data?.offset);
 
     // Fetch Canvas documents with tab schema filter
-    const featureArray = ['data/abstraction/tab'];
+    const featureArray = ['data/schema/tab'];
     const response = await apiClient.getContextDocuments(contextId, featureArray, { limit, offset });
 
     if (response.status === 'success') {
@@ -2280,7 +2280,7 @@ async function handleGetWorkspaceDocuments(data, sendResponse) {
     const offset = normalizeCanvasFetchOffset(requestData.offset);
 
     // Fetch documents for workspace path
-    const response = await apiClient.getWorkspaceDocuments(wsIdOrName, contextSpec, ['data/abstraction/tab'], { limit, offset, treeNameOrTreeId: await browserStorage.getWorkspaceTreeRef() });
+    const response = await apiClient.getWorkspaceDocuments(wsIdOrName, contextSpec, ['data/schema/tab'], { limit, offset, treeNameOrTreeId: await browserStorage.getWorkspaceTreeRef() });
 
     if (response.status === 'success') {
       sendResponse({
@@ -2589,8 +2589,8 @@ async function handleRemoveCanvasDocument(data, sendResponse) {
 
       // Remove or delete from workspace based on closeTab flag
       const response = closeTab
-        ? await apiClient.deleteWorkspaceDocuments(wsId, [document.id], contextSpec, ['data/abstraction/tab'], await browserStorage.getWorkspaceTreeRef())
-        : await apiClient.removeWorkspaceDocuments(wsId, [document.id], contextSpec, ['data/abstraction/tab'], await browserStorage.getWorkspaceTreeRef());
+        ? await apiClient.deleteWorkspaceDocuments(wsId, [document.id], contextSpec, ['data/schema/tab'], await browserStorage.getWorkspaceTreeRef())
+        : await apiClient.removeWorkspaceDocuments(wsId, [document.id], contextSpec, ['data/schema/tab'], await browserStorage.getWorkspaceTreeRef());
       result = { success: response.status === 'success', response };
     }
 
@@ -2647,8 +2647,8 @@ async function handleRemoveCanvasDocuments(data, sendResponse) {
       if (!wsId) throw new Error('No workspace selected');
       const contextSpec = workspacePath || '/';
       response = closeTab
-        ? await apiClient.deleteWorkspaceDocuments(wsId, documentIds, contextSpec, ['data/abstraction/tab'], await browserStorage.getWorkspaceTreeRef())
-        : await apiClient.removeWorkspaceDocuments(wsId, documentIds, contextSpec, ['data/abstraction/tab'], await browserStorage.getWorkspaceTreeRef());
+        ? await apiClient.deleteWorkspaceDocuments(wsId, documentIds, contextSpec, ['data/schema/tab'], await browserStorage.getWorkspaceTreeRef())
+        : await apiClient.removeWorkspaceDocuments(wsId, documentIds, contextSpec, ['data/schema/tab'], await browserStorage.getWorkspaceTreeRef());
     }
 
     const success = response.status === 'success';

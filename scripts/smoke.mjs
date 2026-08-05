@@ -158,9 +158,9 @@ try {
     body: {
       treeNameOrTreeId: 'ContextTree',
       context: '/',
-      features: ['data/abstraction/tab', `tag/${uniqueId}`],
+      features: ['data/schema/tab', `tag/${uniqueId}`],
       documents: [{
-        schema: 'data/abstraction/tab',
+        schema: 'data/schema/tab',
         schemaVersion: '2.0',
         data: {
           url: `https://example.com/${uniqueId}`,

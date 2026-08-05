@@ -116,7 +116,7 @@ export class TabManager {
   convertTabToDocument(tab, browserIdentity, syncSettings = {}) {
     const normalizedUrl = normalizeTabUrl(tab.url, syncSettings);
     const document = {
-      schema: 'data/abstraction/tab',
+      schema: 'data/schema/tab',
       schemaVersion: '2.0',
       data: {
         pinned: tab.pinned,
@@ -138,7 +138,7 @@ export class TabManager {
 
   // Generate feature array for tab document
   generateFeatureArray(browserIdentity, syncSettings = {}) {
-    const features = ['data/abstraction/tab'];
+    const features = ['data/schema/tab'];
 
     // Add browser type
     if (browserIdentity) {
@@ -762,7 +762,7 @@ export class TabManager {
 
     // Index Canvas documents by URL
     canvasDocuments.forEach(doc => {
-      if (doc.schema === 'data/abstraction/tab' && doc.data?.url) {
+      if (doc.schema === 'data/schema/tab' && doc.data?.url) {
         canvasDocsByUrl.set(normalizeTabUrl(doc.data.url, syncSettings), doc);
       }
     });

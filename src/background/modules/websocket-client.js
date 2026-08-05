@@ -223,8 +223,8 @@ export class WebSocketClient {
     console.log('WebSocketClient: Document event:', eventName, payload);
 
     // Filter only tab documents
-    if (payload.document?.schema === 'data/abstraction/tab' ||
-        payload.documents?.some(doc => doc.schema === 'data/abstraction/tab')) {
+    if (payload.document?.schema === 'data/schema/tab' ||
+        payload.documents?.some(doc => doc.schema === 'data/schema/tab')) {
 
       this.emit('tab.event', {
         type: eventName,

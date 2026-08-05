@@ -258,7 +258,7 @@ export class SyncEngine {
     const documentsToOpen = [];
 
     for (const document of documents) {
-      if (document.schema === 'data/abstraction/tab' && document.data?.url) {
+      if (document.schema === 'data/schema/tab' && document.data?.url) {
         // Check if we should open this tab (filter by browser identity if enabled)
         if (this.isBrowserScopedSyncEnabled(syncSettings)) {
           const browserIdentity = await browserStorage.getBrowserIdentity();
@@ -323,7 +323,7 @@ export class SyncEngine {
           : (eventData.document ? [eventData.document] : null);
         const response = eventDocuments
           ? { status: 'success', payload: eventDocuments }
-          : await apiClient.getWorkspaceDocuments(wsId, eventData.contextSpec || '/', ['data/abstraction/tab'], { treeNameOrTreeId: await browserStorage.getWorkspaceTreeRef() });
+          : await apiClient.getWorkspaceDocuments(wsId, eventData.contextSpec || '/', ['data/schema/tab'], { treeNameOrTreeId: await browserStorage.getWorkspaceTreeRef() });
 
         if (response.status === 'success') {
           const documents = response.payload || [];
@@ -333,7 +333,7 @@ export class SyncEngine {
           for (const documentId of documentIds) {
             const document = documents.find(doc => doc.id === documentId);
 
-            if (document && document.schema === 'data/abstraction/tab' && document.data?.url) {
+            if (document && document.schema === 'data/schema/tab' && document.data?.url) {
               console.log('SyncEngine: Found tab document from tree event:', document.data.title);
 
               // Check if we should open this tab (filter by browser identity if enabled)
@@ -490,7 +490,7 @@ export class SyncEngine {
     const { mode, currentContext, currentWorkspace, workspacePath } = syncContext || {};
 
     if (mode === 'context' && currentContext?.id) {
-      const response = await apiClient.getContextDocuments(currentContext.id, ['data/abstraction/tab']);
+      const response = await apiClient.getContextDocuments(currentContext.id, ['data/schema/tab']);
       if (response.status !== 'success') {
         console.log('SyncEngine: Failed to fetch current context documents for reconciliation:', response);
         return null;
@@ -502,7 +502,7 @@ export class SyncEngine {
       const wsId = currentWorkspace.name || currentWorkspace.id;
       if (!wsId) return null;
 
-      const featureArray = ['data/abstraction/tab'];
+      const featureArray = ['data/schema/tab'];
       if (this.isBrowserScopedSyncEnabled(syncSettings)) {
         const browserIdentity = await browserStorage.getBrowserIdentity();
         if (browserIdentity) featureArray.push(`tag/${browserIdentity}`);
@@ -707,7 +707,7 @@ export class SyncEngine {
       }
 
       // Get Canvas documents to find the one we want
-      const response = await apiClient.getContextDocuments(currentContext.id, ['data/abstraction/tab']);
+      const response = await apiClient.getContextDocuments(currentContext.id, ['data/schema/tab']);
       if (response.status !== 'success') {
         throw new Error('Failed to get Canvas documents');
       }
@@ -802,7 +802,7 @@ export class SyncEngine {
 
       // Get Canvas documents
       const syncSettings = await browserStorage.getSyncSettings();
-      const featureArray = ['data/abstraction/tab'];
+      const featureArray = ['data/schema/tab'];
 
       // Filter by browser identity if enabled
       if (this.isBrowserScopedSyncEnabled(syncSettings)) {
@@ -886,7 +886,7 @@ export class SyncEngine {
 
       const browserTabs = await tabManager.getSyncableTabs();
       const syncSettings = await browserStorage.getSyncSettings();
-      const featureArray = ['data/abstraction/tab'];
+      const featureArray = ['data/schema/tab'];
 
       if (this.isBrowserScopedSyncEnabled(syncSettings)) {
         const browserIdentity = await browserStorage.getBrowserIdentity();
@@ -1117,7 +1117,7 @@ export class SyncEngine {
 
       // Get Canvas documents for the new context
       const syncSettings = await browserStorage.getSyncSettings();
-      const featureArray = ['data/abstraction/tab'];
+      const featureArray = ['data/schema/tab'];
 
       // Filter by browser identity if enabled
       if (this.isBrowserScopedSyncEnabled(syncSettings)) {
@@ -1261,7 +1261,7 @@ export class SyncEngine {
         console.log('SyncEngine: Fetching documents from context:', contextId);
 
         const syncSettings = await browserStorage.getSyncSettings();
-        const featureArray = ['data/abstraction/tab'];
+        const featureArray = ['data/schema/tab'];
 
         if (this.isBrowserScopedSyncEnabled(syncSettings)) {
           const browserIdentity = await browserStorage.getBrowserIdentity();
@@ -1287,7 +1287,7 @@ export class SyncEngine {
         console.log('SyncEngine: Fetching documents from workspace:', workspace.name || workspace.id, 'path:', workspacePath);
 
         const wsId = workspace.name || workspace.id;
-        const response = await apiClient.getWorkspaceDocuments(wsId, workspacePath || '/', ['data/abstraction/tab'], { treeNameOrTreeId: await browserStorage.getWorkspaceTreeRef() });
+        const response = await apiClient.getWorkspaceDocuments(wsId, workspacePath || '/', ['data/schema/tab'], { treeNameOrTreeId: await browserStorage.getWorkspaceTreeRef() });
         documents = (response.status === 'success') ? (response.payload || []) : [];
         console.log('SyncEngine: API response for workspace documents:', {
           success: response.status === 'success',
@@ -1477,7 +1477,7 @@ export class SyncEngine {
         documents = documents.slice(0, 100);
       }
 
-      const tabDocuments = documents.filter(document => document.schema === 'data/abstraction/tab' && document.data?.url);
+      const tabDocuments = documents.filter(document => document.schema === 'data/schema/tab' && document.data?.url);
       if (tabDocuments.length === 0) {
         console.log('SyncEngine: No tab documents to open');
         return;

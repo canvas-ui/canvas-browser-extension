@@ -229,12 +229,12 @@ export class ContextIntegration {
   // Check if document is a tab document
   isTabDocument(data) {
     // Check single document
-    if (data.document?.schema === 'data/abstraction/tab') {
+    if (data.document?.schema === 'data/schema/tab') {
       return true;
     }
 
     // Check document array
-    if (data.documents?.some(doc => doc.schema === 'data/abstraction/tab')) {
+    if (data.documents?.some(doc => doc.schema === 'data/schema/tab')) {
       return true;
     }
 

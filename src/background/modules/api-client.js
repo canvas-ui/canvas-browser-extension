@@ -662,8 +662,8 @@ Firefox blocks local network requests for security reasons.
   async getWorkspaceDocuments(workspaceNameOrId, contextSpec = '/', featureArray = [], options = {}) {
     await this.ensureWorkspaceStarted(workspaceNameOrId);
     const enhancedFeatureArray = [...featureArray];
-    if (!enhancedFeatureArray.includes('data/abstraction/tab')) {
-      enhancedFeatureArray.unshift('data/abstraction/tab');
+    if (!enhancedFeatureArray.includes('data/schema/tab')) {
+      enhancedFeatureArray.unshift('data/schema/tab');
     }
 
     let endpoint = `/workspaces/${encodeURIComponent(workspaceNameOrId)}/documents`;
@@ -760,8 +760,8 @@ Firefox blocks local network requests for security reasons.
   async getContextDocuments(contextId, featureArray = [], options = {}) {
     // Always ensure we're looking for tab documents
     const enhancedFeatureArray = [...featureArray];
-    if (!enhancedFeatureArray.includes('data/abstraction/tab')) {
-      enhancedFeatureArray.unshift('data/abstraction/tab');
+    if (!enhancedFeatureArray.includes('data/schema/tab')) {
+      enhancedFeatureArray.unshift('data/schema/tab');
     }
 
     // Get sync settings to check if we should filter by browser instance
