@@ -18,6 +18,13 @@ which is exactly the cold-start we want to cover. (`localStorage` is unavailable
 in MV3 workers; everything already goes through `BrowserStorage` /
 `StorageManager`, both wrapping `storage.local`.)
 
+**Quota — decided: stay on the default, do NOT request `unlimitedStorage`.**
+`storage.local` gives 10 MB in Chrome (5 MB before Chrome 114); Firefox puts it
+under the origin quota manager. There is no per-item cap — `QUOTA_BYTES_PER_ITEM`
+is `storage.sync` only. Living inside 10 MB is what forces the projection and the
+eviction rules below, both of which we want regardless. Revisit only if a real
+measurement says otherwise; adding the permission also re-triggers store review.
+
 ### Phase 1 — cache + revalidate on open
 
 - Add `CANVAS_DOCUMENTS_CACHE: 'canvasDocumentsCache'` to `BrowserStorage.KEYS`
@@ -28,14 +35,33 @@ in MV3 workers; everything already goes through `BrowserStorage` /
   `${mode}:${context.id ?? workspace.id}:${workspacePath ?? '/'}:${offset}:${limit}`
   — mode/context/workspace from `currentConnection` (`popup.js:72`), path from
   `currentWorkspacePath`, offset/limit from `canvasPagination`.
+- **Cache a projection, not the document.** The popup only ever reads four
+  fields: `id`, `data.title`, `data.url`, `data.favIconUrl`
+  (`popup.js:1385-1415`); Fuse indexes the same set, and
+  `markSyncedBrowserTabs()` reads only `doc.data?.url` (`popup.js:903`). So
+  `{id, data:{title, url, favIconUrl}}` is lossless for every consumer and drops
+  `featureArray` / `metadata` / `schema` / checksums / timestamps — most of the
+  bytes. Skip caching `data:` favicon URIs (Chrome returns multi-KB ones for some
+  sites); fall back to the existing placeholder icon.
 - Store `{ documents, count, totalCount, offset, limit, fetchedAt, serverUrl }`.
   Keep `serverUrl` in the record and drop entries that don't match the active
   connection — switching servers must not surface another server's documents.
 - In `loadInitialData()`: read cache → if hit, `applyCanvasDocumentResponse()` +
-  `renderCanvasTabs()` right away → fire the normal
-  `GET_CANVAS_DOCUMENTS`/`GET_WORKSPACE_DOCUMENTS` → on response, write the cache
-  and re-render only if the payload differs (compare a cheap signature: doc count
-  + joined ids + `updatedAt`s) to avoid a visible re-flash on every open.
+  `renderCanvasTabs()` right away → revalidate (below) → re-render only on a real
+  change, so a normal open doesn't visibly re-flash the list.
+- **Revalidate with an ID list, hydrate only the delta.** synapsd already
+  supports this: `listTreeDocuments()` takes `idsOnly` and returns
+  `{ids, count, totalCount}` without hydrating
+  (`src/services/synapsd/src/index.js:2724,2744`), and `getDocumentsByIdArray()`
+  (`:3859`) is the hydrate primitive. Diff returned ids against cached ids →
+  fetch only what's new/changed. On the common "nothing changed" open that is one
+  small response and zero re-render, which also removes the need for a payload
+  signature diff.
+  - **Prerequisite (server-side):** neither `src/transports/routes/contexts/documents.js`
+    nor `.../workspaces/documents.js` exposes `idsOnly` as a query param — add it
+    to both route schemas and pass it through to the synapsd call, then plumb it
+    through `api-client.js` and the `GET_CANVAS_DOCUMENTS` /
+    `GET_WORKSPACE_DOCUMENTS` handlers (`service-worker.js:866,871`).
 - Mark the list stale while revalidating (subtle affordance, not a spinner — the
   point is that content is on screen immediately).
 - Bound it: cap total entries (~20) and evict oldest by `fetchedAt`; drop entries
@@ -55,8 +81,9 @@ in MV3 workers; everything already goes through `BrowserStorage` /
   current even while the popup is closed.
 - Invalidate (don't patch) on the coarse events — `context.changed`,
   `context.url.set`, workspace switch — where the whole result set moves.
-- With this, a popup open is a cache read plus a cheap confirmation; revalidation
-  from Phase 1 stays as the correctness backstop for missed events / offline gaps.
+- With this, a popup open is a cache read plus a cheap confirmation; the
+  `idsOnly` revalidation from Phase 1 stays as the correctness backstop for
+  missed events and offline gaps.
 - Consider extending the same treatment to the tree (`treeData`, `popup.js:88`),
   which has the identical cold-open problem and changes less often.
 
@@ -64,6 +91,60 @@ in MV3 workers; everything already goes through `BrowserStorage` /
 network wait; switch context/workspace/server and confirm no cross-scope leak;
 mutate documents from another client with the popup closed, reopen, confirm the
 list is correct (Phase 2: correct immediately, no flash).
+
+## Phase 3 — restore browser tab state across context switches
+
+**Problem.** In bound mode a context switch may close the old tabs and open new
+ones; switching back should restore the old set as closely as possible. Today it
+cannot: `convertTabToDocument()` (`tab-manager.js:116`) stores only
+`{pinned, url, title, favIconUrl, timestamp}`. Mute state, window placement and
+tab order are simply not captured anywhere.
+
+**This used to exist.** `stripTabProperties()` in `src/background/utils.ts` at
+commit `2e4de35` ("cleanup") — lost in the TS→JS rewrite. Its field list, with
+the original intent:
+
+```
+id, index, highlighted, active, pinned,
+discarded: true,   // hardcoded, NOT tab.discarded — "to conserve memory on restore"
+incognito, audible, mutedInfo, url, title, favIconUrl
+```
+
+The next generation (`08fea67:src/background/modules/tab-manager.js`) inlined the
+same set into `convertTabToDocument` and added `windowId`. Both are worth reading
+before reimplementing.
+
+**Two gotchas from that code — do not reintroduce them:**
+
+- The old restore was a no-op. `browserOpenTab()` did `tabs.create({url})` and
+  then assigned `["mutedInfo","discarded","active","pinned","title"]` onto the
+  returned object, which the browser never reads back. Real restore needs the
+  properties passed to `tabs.create({url, pinned, index, windowId, active})`,
+  plus `tabs.update(id, {muted})` afterwards — `mutedInfo` is read-only on
+  create.
+- `windowId` is per-machine and unstable across browser restarts. The old code
+  put it in the synced document, which pushes one machine's window ids to the
+  server and every other client.
+
+**Split — decided:**
+
+- **In the document (synced):** `pinned`. It is a property of the bookmark, not
+  of a session, and it is already there.
+- **In `storage.local` (local-only), keyed by document id:** `windowId`, `index`,
+  `muted`, `active`, `groupId`. This is per-browser session state; treat restore
+  as best-effort and fall back to opening the tab normally when the recorded
+  window no longer exists.
+- Same discipline as the doc cache: bounded, TTL'd, evicted — it is small per
+  entry but unbounded over time, and we are staying inside the default 10 MB.
+
+**Verify:** mute a tab, place it in a second window, switch context away and
+back — mute and window placement survive; then close that window and switch back
+again, confirming it degrades to a plain open rather than throwing.
+
+## Release
+
+- Major version bump for the above: `2.8.6` → `3.0.0`. Three files, no sync
+  script — `package.json:3`, `manifest-chromium.json:4`, `manifest-firefox.json:4`.
 
 ## Backend features
 
