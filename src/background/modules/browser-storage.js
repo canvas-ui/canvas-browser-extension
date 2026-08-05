@@ -29,7 +29,6 @@ export class BrowserStorage {
       TRACKED_CANVAS_TABS: 'canvasTrackedCanvasTabs',
       PINNED_TABS: 'canvasPinnedTabs',
       USER_INFO: 'canvasUserInfo',
-      RECENT_DESTINATIONS: 'canvasRecentDestinations',
       CANVAS_DOCUMENT_STORE: 'canvasDocumentStore',
       CANVAS_DOCUMENT_INDEXES: 'canvasDocumentIndexes',
       CANVAS_TREE_CACHE: 'canvasTreeCache',
@@ -52,6 +51,14 @@ export class BrowserStorage {
     // cap than the document cache.
     this.TAB_SESSION_STATE_MAX_ENTRIES = 500;
     this.TAB_SESSION_STATE_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+
+    // Recency tiebreak. Several listings can be written inside one millisecond
+    // (paging fast, or the worker filling the cache from a burst of events), and
+    // sorting on `fetchedAt` alone then leaves them tied — a stable sort keeps
+    // insertion order, which ranks the OLDEST first and evicts the page the user
+    // is actually on. Monotonic within a worker lifetime; `fetchedAt` still
+    // leads, since this resets when the worker does.
+    this.cacheSequence = 0;
 
     // Default values
     this.DEFAULTS = {
@@ -85,7 +92,6 @@ export class BrowserStorage {
       // Stored as array in browser storage (Set can't be serialized)
       [this.KEYS.PINNED_TABS]: [],
       [this.KEYS.USER_INFO]: null, // { id, name, email, userType, status }
-      [this.KEYS.RECENT_DESTINATIONS]: [], // Array of recent destinations: [{ id, title, type: 'workspace'|'context', workspaceName?, contextSpec?, timestamp }]
       [this.KEYS.CANVAS_DOCUMENT_STORE]: {}, // { [documentId]: { id, data: {title, url, favIconUrl}, updatedAt } }
       [this.KEYS.CANVAS_DOCUMENT_INDEXES]: {}, // { [scopeKey]: { ids, count, totalCount, offset, limit, fetchedAt, serverUrl, scope, stale } }
       [this.KEYS.CANVAS_TREE_CACHE]: {}, // { [treeKey]: { tree, fetchedAt, serverUrl } }
@@ -398,6 +404,7 @@ export class BrowserStorage {
       offset: offset ?? 0,
       limit: limit ?? ids.length,
       fetchedAt: now,
+      seq: ++this.cacheSequence,
       serverUrl: serverUrl || null,
       // Scope components are kept alongside the key so the service worker can
       // match live events to entries without parsing keys back apart.
@@ -425,7 +432,7 @@ export class BrowserStorage {
     const now = Date.now();
     const fresh = Object.entries(indexes)
       .filter(([, entry]) => Number.isFinite(entry?.fetchedAt) && (now - entry.fetchedAt) <= this.DOCUMENTS_CACHE_TTL_MS)
-      .sort((a, b) => b[1].fetchedAt - a[1].fetchedAt)
+      .sort((a, b) => (b[1].fetchedAt - a[1].fetchedAt) || ((b[1].seq || 0) - (a[1].seq || 0)))
       .slice(0, this.DOCUMENTS_CACHE_MAX_ENTRIES);
 
     const keptIndexes = [];
@@ -610,43 +617,6 @@ export class BrowserStorage {
 
   async setUserInfo(userInfo) {
     return await this.set(this.KEYS.USER_INFO, userInfo);
-  }
-
-  // Recent Destinations Management
-  async getRecentDestinations() {
-    return await this.get(this.KEYS.RECENT_DESTINATIONS);
-  }
-
-  async addRecentDestination(destination) {
-    try {
-      const recent = await this.getRecentDestinations();
-      
-      // Create destination object with timestamp
-      const newDestination = {
-        ...destination,
-        timestamp: Date.now()
-      };
-
-      // Remove any existing destination with the same ID to avoid duplicates
-      const filtered = recent.filter(item => item.id !== destination.id);
-      
-      // Add new destination at the beginning
-      filtered.unshift(newDestination);
-      
-      // Keep only the 5 most recent
-      const trimmed = filtered.slice(0, 5);
-      
-      await this.set(this.KEYS.RECENT_DESTINATIONS, trimmed);
-      console.log('Added recent destination:', newDestination);
-      return trimmed;
-    } catch (error) {
-      console.error('Failed to add recent destination:', error);
-      return [];
-    }
-  }
-
-  async clearRecentDestinations() {
-    return await this.set(this.KEYS.RECENT_DESTINATIONS, []);
   }
 
   // Clear all extension data

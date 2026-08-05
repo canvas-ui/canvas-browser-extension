@@ -271,6 +271,26 @@ three paths, one-update-fixes-all, stale-on-bodyless-update, store-only
 hydration, remove/insert patching, scope isolation between contexts, budget
 eviction with no dangling ids, and the legacy-blob cleanup on clear.
 
+## Context menus removed — **DONE**
+
+The right-click "Send page to Canvas" destination menus are gone: 715 lines out
+of `service-worker.js`, plus the `contextMenus` permission from both manifests.
+They were awkward to use and expensive to keep — the whole workspace × tree
+picker had to be rebuilt eagerly on every selection change, because Chromium has
+no lazy submenu population.
+
+Removed with them: `setupContextMenus` and its click handler, the debounce, the
+menu workspace/tree prefetch and its cache, and the recent-destinations storage
+(nothing writes or reads it once the menus are gone — the popup's Sync-To panel
+covers filing a tab anywhere).
+
+**Found while removing it:** the eviction tiebreak. Several listings can be
+written inside one millisecond, and sorting on `fetchedAt` alone left them tied —
+a stable sort then ranks the *oldest* first and evicts the page the user is on,
+exactly inverting the "newest always survives" rule. Index entries now carry a
+monotonic `seq` as a tiebreak. It surfaced as a 1-in-6 flake in
+`tests/documents-cache.test.js`, which is the only reason it was caught.
+
 ## Not verified in a browser yet
 
 Phases 1–3 are lint- and build-clean, and the server side of Phase 1 is verified

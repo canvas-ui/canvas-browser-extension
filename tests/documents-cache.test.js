@@ -214,6 +214,9 @@ test('a context event leaves another context\'s listing alone', async () => {
   assert.ok(indexes[keyOf('ctx2')], 'other context untouched');
 });
 
+// Writes here land inside a single millisecond, which is the point: it pins the
+// tiebreak. Sorting on fetchedAt alone leaves them tied, and a stable sort then
+// ranks the oldest first and evicts the page the user is on.
 test('eviction stays inside the budget and never leaves a dangling id', async () => {
   browserStorage.DOCUMENTS_CACHE_MAX_DOCUMENTS = 10;
   browserStorage.DOCUMENTS_CACHE_MAX_ENTRIES = 3;
