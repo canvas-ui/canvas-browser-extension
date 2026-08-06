@@ -4,6 +4,10 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Canvas Extension Settings</title>
+  <!-- Stamps the stored theme onto <html> before first paint. Must stay a
+       classic (non-module) script above the stylesheet, or the page flashes the
+       default theme — see src/theme/theme-init.js. -->
+  <script src="../theme/theme-init.js"></script>
   <link rel="stylesheet" href="settings.css">
 </head>
 <body>
@@ -27,6 +31,7 @@
       <nav class="tabs" id="tabs">
         <button type="button" class="tab active" data-tab="connection">Connection</button>
         <button type="button" class="tab" data-tab="sync">Sync</button>
+        <button type="button" class="tab" data-tab="appearance">Appearance</button>
         <button type="button" class="tab" data-tab="advanced">Advanced</button>
       </nav>
     </header>
@@ -294,6 +299,55 @@
             <label for="canvasTabsFetchLimit">Canvas tab fetch limit</label>
             <input type="number" id="canvasTabsFetchLimit" class="input-field" min="1" max="2000" step="1" value="200">
             <small class="help-text">How many Canvas tab documents the popup fetches per page.</small>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============ APPEARANCE ============ -->
+      <!-- Theme, scheme and density are three independent axes and compose
+           freely, so they are three controls rather than a list of presets.
+           The options themselves are rendered from src/theme/registry.js —
+           see renderAppearance() in settings.js — so this markup only holds
+           the containers. -->
+      <section class="tab-panel" id="tab-appearance">
+        <div class="card">
+          <div class="card-header">
+            <h2>Theme</h2>
+            <p class="card-desc">Shared with the Canvas web UI. Applies to the popup, the sidebar and this page.</p>
+          </div>
+          <div class="theme-grid" id="themeGrid"></div>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <h2>Colour scheme</h2>
+            <p class="card-desc">System follows your operating system's light/dark setting.</p>
+          </div>
+          <div class="segmented" id="schemeSegmented"></div>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <h2>Density</h2>
+            <p class="card-desc">Control and row heights. Auto uses larger targets on a touchscreen.</p>
+          </div>
+          <div class="option-rows" id="densityOptions"></div>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <h2>Preview</h2>
+            <p class="card-desc">The controls most likely to break under a theme change.</p>
+          </div>
+          <div class="appearance-preview">
+            <input type="text" class="input-field" value="Input field" aria-label="Preview input">
+            <button type="button" class="btn primary">Primary</button>
+            <button type="button" class="btn secondary">Secondary</button>
+            <button type="button" class="btn danger">Danger</button>
+            <span class="status-pill"><span class="status-dot connected"></span><span class="status-text">Connected</span></span>
+          </div>
+          <div class="form-actions">
+            <button type="button" id="resetAppearanceBtn" class="btn secondary">Reset appearance</button>
           </div>
         </div>
       </section>

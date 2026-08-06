@@ -10,6 +10,18 @@ const appName = 'canvas-extension-'
 
 const isDev = process.env.NODE_ENV === 'dev'
 
+/*
+ * Baseline the JS and CSS are compiled against.
+ *
+ * Chromium 111 / Firefox 128 is what the theme layer needs: src/theme/theme.css
+ * uses OKLCH relative colour (`oklch(from var(--x) l c h / …)`), which esbuild
+ * does not down-level. The previous chrome88/firefox109 target was aspirational
+ * rather than true — nothing verified it, and the CSS would simply not render on
+ * those versions. Engines older than this fall back through the `@supports not
+ * (color: oklch(…))` block the theme ships for exactly that case.
+ */
+const target = ['chrome111', 'firefox128']
+
 let buildConfig = {
   entryPoints: {
     'background/service-worker': 'src/background/service-worker.js',
@@ -26,14 +38,59 @@ let buildConfig = {
     'process.env.NODE_ENV': isDev ? '"development"' : '"production"',
   },
   format: 'esm',
-  target: ['chrome88', 'firefox109'],
+  target,
   loader: {
     '.png': 'file',
     '.svg': 'file',
     '.ico': 'file',
-    '.css': 'text'
   },
   external: [],
+}
+
+/*
+ * CSS is its own esbuild pass.
+ *
+ * popup.css and settings.css are @import manifests over the partials in the
+ * same directory plus src/theme/theme.css; esbuild resolves those and emits one
+ * flat file per page, so nothing @imports at runtime.
+ *
+ * Separate from the JS config on purpose — that one is `format: 'esm'`, and a
+ * CSS entry point in an ESM build is a category error. Keeping them apart also
+ * means the JS pass never has to carry a `.css` loader entry, which is what
+ * would turn a stylesheet into a JS module.
+ */
+const cssBuildConfig = {
+  entryPoints: {
+    'popup/popup': 'src/popup/popup.css',
+    'settings/settings': 'src/settings/settings.css',
+  },
+  bundle: true,
+  outdir: outdir,
+  minify: !isDev,
+  legalComments: 'none',
+  target,
+  // Nothing should leave the bundle. The only url() in the sources is a data:
+  // URI, which esbuild passes through untouched.
+  external: [],
+}
+
+/*
+ * The pre-paint theme applier, built alone because it is the one script that
+ * must NOT be a module.
+ *
+ * popup.html and settings.html load it from <head> as a classic
+ * <script src>, above the stylesheet. A module script is deferred and would run
+ * after first paint, which reintroduces exactly the flash of the default theme
+ * it exists to prevent. IIFE keeps it synchronous and render-blocking.
+ */
+const themeInitBuildConfig = {
+  entryPoints: { 'theme/theme-init': 'src/theme/theme-init.js' },
+  bundle: true,
+  outdir: outdir,
+  minify: !isDev,
+  legalComments: 'none',
+  format: 'iife',
+  target,
 }
 
 async function deleteOldDir() {
@@ -44,6 +101,12 @@ async function deleteOldDir() {
 async function runEsbuild() {
   console.log('Building JavaScript files...')
   await esbuild.build(buildConfig)
+
+  console.log('Building the pre-paint theme applier...')
+  await esbuild.build(themeInitBuildConfig)
+
+  console.log('Bundling CSS...')
+  await esbuild.build(cssBuildConfig)
 }
 
 async function zipFolder(dir) {
@@ -110,15 +173,20 @@ async function exportForBrowser(browser) {
     // Background script (will be renamed for Firefox)
     { src: 'build/background/service-worker.js', dst: 'service-worker.js' },
 
-    // Popup files
+    // Pre-paint theme applier. Shared by both pages, loaded from <head>.
+    { src: 'build/theme/theme-init.js', dst: 'theme/theme-init.js' },
+
+    // Popup files. The CSS comes from build/, not src/ — it is an @import
+    // manifest over ../theme/theme.css and the partials beside it, and esbuild
+    // has already flattened it.
     { src: 'src/popup/popup.html', dst: 'popup/popup.html' },
     { src: 'build/popup/popup.js', dst: 'popup/popup.js' },
-    { src: 'src/popup/popup.css', dst: 'popup/popup.css' },
+    { src: 'build/popup/popup.css', dst: 'popup/popup.css' },
 
     // Settings files
     { src: 'src/settings/settings.html', dst: 'settings/settings.html' },
     { src: 'build/settings/settings.js', dst: 'settings/settings.js' },
-    { src: 'src/settings/settings.css', dst: 'settings/settings.css' },
+    { src: 'build/settings/settings.css', dst: 'settings/settings.css' },
 
     // Manifest (browser-specific)
     { src: `manifest-${browser}.json`, dst: 'manifest.json' },

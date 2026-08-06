@@ -1,6 +1,15 @@
 // Canvas Extension Settings JavaScript
 // Handles settings page interactions and configuration management
 
+import { DENSITY_OPTIONS, SCHEME_OPTIONS, THEMES } from '../theme/registry.js';
+import {
+  clearStoredPreferences,
+  readStoredPreferences,
+  applyThemeWithoutTransition,
+  updateTheme,
+  watchTheme
+} from '../theme/apply-theme.js';
+
 // DOM elements
 let browserIdentity, serverUrl, apiBasePath, apiToken;
 let authModeToken, authModeCredentials, apiTokenGroup, credentialsGroup, authEmail, authPassword;
@@ -38,6 +47,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   initializeElements();
   setupEventListeners();
   setupStorageListeners();
+  setupAppearance();
   try {
     const extApi = (typeof browser !== 'undefined' && browser.runtime) ? browser : (typeof chrome !== 'undefined' ? chrome : null);
     const version = extApi?.runtime?.getManifest?.().version;
@@ -200,6 +210,153 @@ function setupEventListeners() {
 function switchTab(name) {
   document.querySelectorAll('.tab').forEach((t) => t.classList.toggle('active', t.dataset.tab === name));
   document.querySelectorAll('.tab-panel').forEach((p) => p.classList.toggle('active', p.id === `tab-${name}`));
+}
+
+// ---- Appearance ------------------------------------------------------------
+
+/*
+ * The Appearance tab.
+ *
+ * Every control is rendered from ../theme/registry.js rather than written into
+ * settings.html, so a theme added upstream (and pulled in by `npm run
+ * sync:theme`) shows up here without anyone editing this page. That is the same
+ * guarantee the web UI's picker has.
+ *
+ * Preferences live in localStorage, not in the extension's sync settings —
+ * see the note at the top of ../theme/apply-theme.js for why. There is no Save
+ * button: a theme choice is only meaningful once you can see it applied.
+ */
+function setupAppearance() {
+  const themeGrid = document.getElementById('themeGrid');
+  const schemeSegmented = document.getElementById('schemeSegmented');
+  const densityOptions = document.getElementById('densityOptions');
+  const resetBtn = document.getElementById('resetAppearanceBtn');
+
+  if (!themeGrid || !schemeSegmented || !densityOptions) return;
+
+  themeGrid.innerHTML = '';
+  for (const theme of THEMES) {
+    const label = document.createElement('label');
+    label.className = 'theme-option';
+
+    const input = document.createElement('input');
+    input.type = 'radio';
+    input.name = 'appearance-theme';
+    input.value = theme.id;
+    label.appendChild(input);
+
+    const swatches = document.createElement('div');
+    swatches.className = 'theme-swatches';
+    for (const colour of theme.swatches) {
+      const chip = document.createElement('span');
+      chip.className = 'swatch';
+      // Literal palette values, not tokens — a preview of `nord` has to show
+      // nord's colours while some other theme is active.
+      chip.style.background = colour;
+      swatches.appendChild(chip);
+    }
+    label.appendChild(swatches);
+
+    const name = document.createElement('div');
+    name.className = 'theme-name';
+    name.textContent = theme.name;
+    label.appendChild(name);
+
+    const desc = document.createElement('div');
+    desc.className = 'theme-desc';
+    desc.textContent = theme.description;
+    label.appendChild(desc);
+
+    input.addEventListener('change', () => {
+      if (input.checked) updateTheme({ theme: theme.id });
+    });
+
+    themeGrid.appendChild(label);
+  }
+
+  schemeSegmented.innerHTML = '';
+  for (const option of SCHEME_OPTIONS) {
+    const label = document.createElement('label');
+    label.className = 'segment';
+
+    const input = document.createElement('input');
+    input.type = 'radio';
+    input.name = 'appearance-scheme';
+    input.value = option.id;
+    label.appendChild(input);
+
+    const span = document.createElement('span');
+    span.textContent = option.name;
+    label.appendChild(span);
+
+    input.addEventListener('change', () => {
+      if (input.checked) updateTheme({ scheme: option.id });
+    });
+
+    schemeSegmented.appendChild(label);
+  }
+
+  densityOptions.innerHTML = '';
+  for (const option of DENSITY_OPTIONS) {
+    const label = document.createElement('label');
+    label.className = 'option-row';
+
+    const input = document.createElement('input');
+    input.type = 'radio';
+    input.name = 'appearance-density';
+    input.value = option.id;
+    label.appendChild(input);
+
+    const mark = document.createElement('span');
+    mark.className = 'option-mark';
+    label.appendChild(mark);
+
+    const text = document.createElement('span');
+    text.className = 'option-text';
+
+    const name = document.createElement('span');
+    name.className = 'option-name';
+    name.textContent = option.name;
+    text.appendChild(name);
+
+    const help = document.createElement('span');
+    help.className = 'option-help';
+    help.textContent = option.description;
+    text.appendChild(help);
+
+    label.appendChild(text);
+
+    input.addEventListener('change', () => {
+      if (input.checked) updateTheme({ density: option.id });
+    });
+
+    densityOptions.appendChild(label);
+  }
+
+  resetBtn?.addEventListener('click', () => {
+    clearStoredPreferences();
+    const restored = readStoredPreferences();
+    applyThemeWithoutTransition(restored);
+    syncAppearanceControls(restored);
+    showToast('Appearance reset to defaults', 'success');
+  });
+
+  syncAppearanceControls(readStoredPreferences());
+
+  // Keeps the controls honest when the change came from somewhere else — the
+  // popup's scheme toggle, another settings tab, or the OS flipping while the
+  // preference is 'system'.
+  watchTheme(syncAppearanceControls);
+}
+
+function syncAppearanceControls(preferences) {
+  const select = (name, value) => {
+    const input = document.querySelector(`input[name="${name}"][value="${value}"]`);
+    if (input) input.checked = true;
+  };
+  select('appearance-theme', preferences.theme);
+  select('appearance-scheme', preferences.scheme);
+  select('appearance-density', preferences.density);
 }
 
 // ---- Auto-save -------------------------------------------------------------

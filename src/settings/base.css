@@ -1,0 +1,178 @@
+/**
+ * Settings — shell.
+ *
+ * Reset, page frame, sticky header, tab bar. The page reads as a single sheet
+ * (`--card`) laid on the desk (`--desk`), which is why the container carries
+ * side borders rather than a shadow: at 760px on a wide screen the borders are
+ * what make it a document instead of a full-bleed app.
+ */
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: var(--font-family-sans);
+  font-size: var(--font-size-sm);
+  line-height: var(--line-height-sm);
+  color: var(--foreground);
+  background-color: var(--desk);
+}
+
+.container {
+  max-width: 760px;
+  margin: 0 auto;
+  min-height: 100vh;
+  background-color: var(--card);
+  color: var(--card-foreground);
+  border-left: 1px solid var(--border);
+  border-right: 1px solid var(--border);
+}
+
+/* ── Header ─────────────────────────────────────────────────────────────── */
+
+.header {
+  border-bottom: 1px solid var(--border);
+  background-color: var(--card);
+  position: sticky;
+  top: 0;
+  z-index: var(--z-layer-sticky);
+}
+
+.header-content {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 18px 28px 14px;
+}
+
+.header .logo {
+  width: 36px;
+  height: 36px;
+}
+
+.header-titles {
+  flex: 1;
+  min-width: 0;
+}
+
+.header h1 {
+  font-size: var(--font-size-xl);
+  font-weight: 700;
+  color: var(--foreground);
+}
+
+.subtitle {
+  font-size: var(--font-size-xs);
+  color: var(--muted-foreground);
+}
+
+.header-status {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--muted);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.save-indicator {
+  font-size: var(--font-size-xs);
+  font-weight: 600;
+  color: var(--success);
+  opacity: 0;
+  transition: opacity var(--duration-normal) var(--ease-standard);
+}
+
+.save-indicator.show {
+  opacity: 1;
+}
+
+.save-indicator::before {
+  content: "✓ ";
+}
+
+/* ── Tabs ───────────────────────────────────────────────────────────────── */
+
+.tabs {
+  display: flex;
+  gap: 4px;
+  padding: 0 20px;
+}
+
+.tab {
+  appearance: none;
+  border: none;
+  background: none;
+  padding: 10px 14px;
+  font-size: var(--font-size-sm);
+  font-weight: 500;
+  color: var(--muted-foreground);
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+}
+
+.tab:hover {
+  color: var(--foreground);
+}
+
+.tab.active {
+  color: var(--foreground);
+  border-bottom-color: var(--foreground);
+}
+
+/* ── Main ───────────────────────────────────────────────────────────────── */
+
+.main {
+  padding: 24px 28px 48px;
+}
+
+.tab-panel {
+  display: none;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.tab-panel.active {
+  display: flex;
+}
+
+code {
+  font-family: var(--font-family-mono);
+  font-size: 0.9em;
+  background: var(--muted);
+  padding: 1px 5px;
+  border-radius: var(--radius-sm);
+}
+
+/* ── Responsive ─────────────────────────────────────────────────────────── */
+
+@media (max-width: 768px) {
+  .container {
+    border-left: none;
+    border-right: none;
+  }
+  .header-content { padding: 14px 16px 12px; flex-wrap: wrap; }
+  .main { padding: 18px 16px 40px; }
+  .form-actions { flex-direction: column; }
+  .btn { width: 100%; }
+}
+
+/* ── Scrollbar ──────────────────────────────────────────────────────────── */
+
+::-webkit-scrollbar { width: 8px; }
+::-webkit-scrollbar-track { background: var(--muted); }
+::-webkit-scrollbar-thumb { background: var(--input); border-radius: var(--radius-sm); }
+::-webkit-scrollbar-thumb:hover { background: var(--muted-foreground); }

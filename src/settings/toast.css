@@ -1,0 +1,31 @@
+/**
+ * Settings — toasts.
+ *
+ * Each variant pairs its fill with the matching `-foreground`, so the label
+ * stays legible when a theme inverts (a dark theme's `--warning` is a light
+ * amber that a white label disappears into).
+ */
+
+.toast {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  padding: 14px 18px;
+  border-radius: var(--radius-lg);
+  font-size: var(--font-size-sm);
+  font-weight: 500;
+  z-index: var(--z-layer-toast);
+  box-shadow: var(--shadow-elevation-3);
+  animation: settings-toast-in var(--duration-slow) var(--ease-decelerate);
+  max-width: 360px;
+}
+
+.toast.success { background-color: var(--success); color: var(--success-foreground); }
+.toast.error { background-color: var(--destructive); color: var(--destructive-foreground); }
+.toast.warning { background-color: var(--warning); color: var(--warning-foreground); }
+.toast.info { background-color: var(--info); color: var(--info-foreground); }
+
+@keyframes settings-toast-in {
+  from { transform: translateX(100%); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}

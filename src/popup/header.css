@@ -1,0 +1,362 @@
+/**
+ * Popup — header.
+ *
+ * Connection state, the context breadcrumb and its inline editor, the header
+ * icon buttons, and the ad-hoc "send this page" button.
+ *
+ * ── A note on blue ─────────────────────────────────────────────────────────
+ *
+ * The extension uses blue for "actionable / links / current context", and that
+ * maps to `--info` rather than `--primary`. `--primary` in the canvas theme is
+ * black — routing these through it would flatten every accent in the popup to
+ * the text colour. `--info` is the semantic blue, it carries a matching
+ * `--info-foreground`, and it moves with the theme (nord blue, terminal cyan,
+ * high-contrast navy).
+ *
+ * If the popup should instead pick up each theme's signature accent, `--secondary`
+ * is the token for that — canvas teal, terminal green. That is a visual redesign,
+ * not a port, so it is deliberately not what this does.
+ */
+
+/* ── Disconnected state ─────────────────────────────────────────────────── */
+
+/* Red header, body greyed, only Settings actionable. Conveys "not syncing"
+   without the old banner that flashed as a flex column.
+
+   `--destructive` with `--destructive-foreground` rather than a hand-picked
+   dark red: the pair inverts together, so the bar stays legible in a dark
+   theme instead of becoming near-black text on near-black. */
+body.disconnected .header {
+  background: var(--destructive);
+  border-bottom-color: color-mix(in oklab, var(--destructive) 70%, var(--foreground));
+}
+
+body.disconnected .header .status-text,
+body.disconnected .header .context-id,
+body.disconnected .header .context-url {
+  color: var(--destructive-foreground);
+}
+
+body.disconnected .header .selector-btn,
+body.disconnected .header #dockBtn,
+body.disconnected .header .settings-btn {
+  color: var(--destructive-foreground);
+}
+
+/* Everything except Settings is inert while disconnected. */
+body.disconnected .selector-btn,
+body.disconnected #dockBtn,
+body.disconnected .add-page-btn {
+  opacity: 0.4;
+  pointer-events: none;
+}
+
+body.disconnected #settingsBtn {
+  color: var(--destructive-foreground);
+  opacity: 1;
+}
+
+body.disconnected .search-section,
+body.disconnected .tab-nav,
+body.disconnected .main {
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+/* Exclamation badge overlaid on the logo while disconnected. */
+.logo-wrap {
+  position: relative;
+  display: inline-flex;
+}
+
+.disconnected-badge {
+  display: none;
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  min-width: 14px;
+  height: 14px;
+  padding: 0 3px;
+  box-sizing: border-box;
+  border-radius: 7px;
+  background: var(--destructive);
+  color: var(--destructive-foreground);
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 14px;
+  text-align: center;
+  border: 1px solid color-mix(in oklab, var(--destructive) 70%, var(--foreground));
+}
+
+body.disconnected .disconnected-badge {
+  display: block;
+}
+
+/* ── Header ─────────────────────────────────────────────────────────────── */
+
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 16px;
+  background: var(--muted);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+  position: sticky;
+  top: 0;
+  /* Topmost of three stacked sticky rows; the search box and tab bar sit one
+     and two steps below it. See ./tabs.css, which derives theirs from this
+     token rather than restating a literal. */
+  z-index: var(--z-layer-sticky);
+}
+
+.header-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.header-right {
+  display: flex;
+  align-items: center;
+  gap: 0px;
+  margin-right: 6px;
+}
+
+.logo {
+  width: 24px;
+  height: 24px;
+  cursor: pointer;
+  transition: opacity var(--duration-normal) var(--ease-standard);
+}
+
+.logo:hover {
+  opacity: 0.8;
+}
+
+/* ── Connection state ───────────────────────────────────────────────────── */
+
+.connection-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.connection-status {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* Disconnected is the default: a dot that has not been told otherwise should
+   not claim the connection is fine. */
+.status-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--destructive);
+}
+
+.status-dot.connected {
+  background: var(--success);
+}
+
+.status-dot.unbound {
+  background: var(--info);
+}
+
+.status-dot.disconnected {
+  background: var(--destructive);
+}
+
+.status-text {
+  font-size: 10px;
+  font-weight: 500;
+}
+
+/* ── Context breadcrumb ─────────────────────────────────────────────────── */
+
+.context-info {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.context-id {
+  font-size: 10px;
+  font-weight: 500;
+}
+
+.context-url-container {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.context-url {
+  font-size: var(--font-size-xs);
+  font-weight: 600;
+  color: var(--info);
+  transition: color var(--duration-normal) var(--ease-standard);
+}
+
+.context-url.clickable {
+  cursor: pointer;
+}
+
+.context-url.clickable:hover {
+  color: color-mix(in oklab, var(--info) 80%, var(--foreground));
+  text-decoration: underline;
+}
+
+.context-url-edit {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.context-url-input {
+  flex: 1;
+  min-width: 120px;
+  padding: 2px 6px;
+  font-size: 11px;
+  color: var(--foreground);
+  background: var(--background);
+  border: var(--input-border-width) solid var(--input);
+  border-radius: var(--radius-xs);
+  outline: none;
+}
+
+.context-url-input:focus {
+  border-color: var(--ring);
+  outline: var(--focus-ring-width) solid var(--focus-ring-color);
+  outline-offset: 1px;
+}
+
+.context-url-submit,
+.context-url-cancel {
+  width: 20px;
+  height: 20px;
+  border: none;
+  border-radius: var(--radius-xs);
+  cursor: pointer;
+  font-size: var(--font-size-xs);
+  font-weight: bold;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background-color var(--duration-normal) var(--ease-standard);
+}
+
+.context-url-submit {
+  background-color: var(--success);
+  color: var(--success-foreground);
+}
+
+.context-url-submit:hover {
+  background-color: color-mix(in oklab, var(--success) 85%, var(--foreground));
+}
+
+.context-url-cancel {
+  background-color: var(--destructive);
+  color: var(--destructive-foreground);
+}
+
+.context-url-cancel:hover {
+  background-color: color-mix(in oklab, var(--destructive) 85%, var(--foreground));
+}
+
+/* ── Header icon buttons ────────────────────────────────────────────────── */
+
+.selector-btn,
+.settings-btn {
+  background: none;
+  border: none;
+  padding: 4px;
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  color: var(--muted-foreground);
+}
+
+.selector-btn:hover,
+.settings-btn:hover {
+  background: var(--accent);
+  color: var(--accent-foreground);
+}
+
+.selector-btn:focus-visible,
+.settings-btn:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring-color);
+  outline-offset: var(--focus-ring-offset);
+}
+
+/* The scheme toggle shows the scheme you would switch TO, not the one you are
+   in — a sun while dark, a moon while light. Driven off the same `data-scheme`
+   attribute the theme layer reads, so the icon cannot fall out of step with
+   what is rendered. */
+#schemeBtn .scheme-icon-dark,
+#schemeBtn .scheme-icon-light {
+  display: none;
+}
+
+[data-scheme="light"] #schemeBtn .scheme-icon-dark,
+[data-scheme="dark"] #schemeBtn .scheme-icon-light {
+  display: block;
+}
+
+/* ── Ad-hoc "send current page" ─────────────────────────────────────────── */
+
+/* Default: red circular "+". When a Sync To path is selected (.ready) it
+   morphs into a wider "Sync" pill. */
+.add-page-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  height: 30px;
+  min-width: 30px;
+  padding: 0;
+  margin-left: 10px;
+  border: none;
+  border-radius: 15px;
+  background: var(--destructive);
+  color: var(--destructive-foreground);
+  cursor: pointer;
+  transition:
+    background var(--duration-fast) var(--ease-standard),
+    min-width var(--duration-fast) var(--ease-standard),
+    padding var(--duration-fast) var(--ease-standard);
+}
+
+.add-page-btn:hover {
+  background: color-mix(in oklab, var(--destructive) 85%, var(--foreground));
+}
+
+.add-page-btn .add-page-label {
+  display: none;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+/* Selection made: hide the "+" glyph, reveal the "Sync" label, go primary blue. */
+.add-page-btn.ready {
+  min-width: 0;
+  padding: 0 14px;
+  border-radius: 15px;
+  background: var(--info);
+  color: var(--info-foreground);
+}
+
+.add-page-btn.ready:hover {
+  background: color-mix(in oklab, var(--info) 85%, var(--foreground));
+}
+
+.add-page-btn.ready .add-page-icon {
+  display: none;
+}
+
+.add-page-btn.ready .add-page-label {
+  display: inline;
+}

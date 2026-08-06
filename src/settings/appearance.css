@@ -1,0 +1,184 @@
+/**
+ * Settings — the Appearance tab.
+ *
+ * Three independent axes, exactly as the theme layer models them: palette
+ * (`data-theme`), light/dark (`data-scheme`) and information density
+ * (`data-density`). They compose — terminal + dark + touch is a valid, coherent
+ * result — so this is three separate controls, not one list of nine presets.
+ *
+ * Both the theme cards and the density rows are rendered from ../theme/registry.js,
+ * so a theme added upstream appears here without touching this file.
+ */
+
+.theme-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+@media (max-width: 560px) {
+  .theme-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.theme-option {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--background);
+  cursor: pointer;
+  transition:
+    border-color var(--duration-fast) var(--ease-standard),
+    background-color var(--duration-fast) var(--ease-standard);
+}
+
+.theme-option:hover {
+  background: var(--muted);
+}
+
+.theme-option input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* The selected card is marked by a ring rather than a fill, so the swatches —
+   which are the actual content — are not tinted by the selection state. */
+.theme-option:has(input:checked) {
+  border-color: var(--ring);
+  box-shadow: 0 0 0 1px var(--ring);
+}
+
+.theme-option:has(input:focus-visible) {
+  outline: var(--focus-ring-width) solid var(--focus-ring-color);
+  outline-offset: var(--focus-ring-offset);
+}
+
+/*
+ * Swatches are literal colour values from the registry, not theme tokens.
+ *
+ * That is the one place in the extension where a raw colour is correct: a
+ * preview of the `nord` palette has to show nord's colours while `canvas` is
+ * the active theme. Using tokens here would render four identical chips.
+ */
+.theme-swatches {
+  display: flex;
+  gap: 4px;
+}
+
+.swatch {
+  width: 22px;
+  height: 22px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+}
+
+.theme-name {
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  color: var(--foreground);
+}
+
+.theme-desc {
+  font-size: var(--font-size-xs);
+  line-height: 1.4;
+  color: var(--muted-foreground);
+}
+
+/* ── Density rows ───────────────────────────────────────────────────────── */
+
+.option-rows {
+  display: flex;
+  flex-direction: column;
+}
+
+.option-row {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--border);
+  cursor: pointer;
+}
+
+.option-row:last-child {
+  border-bottom: none;
+}
+
+.option-row input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* A hand-drawn radio: the native control cannot be recoloured per theme, and
+   `accent-color` gives no control over the unchecked ring. */
+.option-mark {
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 2px solid var(--input);
+  transition:
+    border-color var(--duration-fast) var(--ease-standard),
+    box-shadow var(--duration-fast) var(--ease-standard);
+}
+
+.option-row input:checked + .option-mark {
+  border-color: var(--primary);
+  /* Inset shadow rather than a child element — one box, no pseudo to keep in
+     step with the border width. */
+  box-shadow: inset 0 0 0 3px var(--background);
+  background: var(--primary);
+}
+
+.option-row input:focus-visible + .option-mark {
+  outline: var(--focus-ring-width) solid var(--focus-ring-color);
+  outline-offset: var(--focus-ring-offset);
+}
+
+.option-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.option-name {
+  font-size: var(--font-size-sm);
+  font-weight: 500;
+  color: var(--foreground);
+}
+
+.option-help {
+  font-size: var(--font-size-xs);
+  color: var(--muted-foreground);
+}
+
+/* ── Live preview strip ─────────────────────────────────────────────────── */
+
+/* Nothing exotic — a row of the components most likely to break under a theme
+   change, so a bad combination is visible without leaving the tab. Inputs and
+   borders going invisible is the failure that shows up first. */
+.appearance-preview {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--muted);
+}
+
+.appearance-preview .input-field {
+  width: auto;
+  flex: 1 1 160px;
+  min-width: 0;
+}

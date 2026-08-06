@@ -1,0 +1,213 @@
+/**
+ * Settings — surfaces.
+ *
+ * Cards, notices, and the status/debug/context read-out panels. Everything
+ * here sits on the page sheet, so the recessed panels use `--muted` rather
+ * than a second card colour — nesting `--card` inside `--card` is invisible in
+ * every theme where the two match.
+ */
+
+.card {
+  border: 1px solid var(--border);
+  border-radius: var(--card-radius);
+  padding: 20px 22px;
+  background: var(--card);
+}
+
+.card-header {
+  margin-bottom: 16px;
+}
+
+.card-header h2 {
+  font-size: var(--font-size-base);
+  font-weight: 600;
+  color: var(--foreground);
+}
+
+.card-desc {
+  font-size: 13px;
+  color: var(--muted-foreground);
+  margin-top: 2px;
+}
+
+/* ── Collapsible advanced card ──────────────────────────────────────────── */
+
+.card-collapsible {
+  padding: 0;
+}
+
+.card-collapsible > summary {
+  list-style: none;
+  cursor: pointer;
+  padding: 16px 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.card-collapsible > summary::-webkit-details-marker {
+  display: none;
+}
+
+.summary-title {
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.summary-hint {
+  font-size: var(--font-size-xs);
+  color: var(--muted-foreground);
+}
+
+.card-collapsible[open] > summary {
+  border-bottom: 1px solid var(--border);
+}
+
+.card-collapsible .card-body {
+  padding: 18px 22px 22px;
+}
+
+/* ── Notice ─────────────────────────────────────────────────────────────── */
+
+.notice {
+  padding: 14px 16px;
+  border: 1px dashed var(--input);
+  border-radius: var(--radius-lg);
+  background: var(--muted);
+  color: var(--muted-foreground);
+  font-size: 13px;
+}
+
+/* ── Connection status panel ────────────────────────────────────────────── */
+
+.connection-status {
+  margin-top: 18px;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background-color: var(--muted);
+}
+
+.status-indicator {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 6px;
+}
+
+/* Disconnected is the default: a dot that has not been told otherwise should
+   not claim the connection is fine. */
+.status-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background-color: var(--destructive);
+  flex-shrink: 0;
+}
+
+.status-dot.connected {
+  background-color: var(--success);
+}
+
+.status-dot.disconnected {
+  background-color: var(--destructive);
+}
+
+.status-text {
+  font-size: var(--font-size-sm);
+  font-weight: 500;
+  color: var(--foreground);
+}
+
+.status-details {
+  font-size: 13px;
+  color: var(--muted-foreground);
+}
+
+/* ── Debug output ───────────────────────────────────────────────────────── */
+
+/* Deliberately inverted — this is a console pane, and it should read as one in
+   every theme. `--primary`/`--primary-foreground` invert together, so it stays
+   a legible dark-on-light in a dark theme rather than becoming black-on-black. */
+.debug-panel {
+  margin-top: 16px;
+}
+
+.debug-output {
+  margin-top: 12px;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background-color: var(--primary);
+  color: var(--primary-foreground);
+  font-family: var(--font-family-mono);
+  font-size: var(--font-size-xs);
+  line-height: 1.45;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 480px;
+}
+
+/* ── Signed-in user ─────────────────────────────────────────────────────── */
+
+.user-info {
+  margin-top: 12px;
+  padding: 12px;
+  background-color: var(--muted);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+}
+
+.user-details {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 13px;
+}
+
+.user-name {
+  font-weight: 500;
+  color: var(--foreground);
+}
+
+.user-server {
+  color: var(--muted-foreground);
+}
+
+/* ── Bound context ──────────────────────────────────────────────────────── */
+
+.current-context {
+  margin-top: 18px;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background-color: var(--muted);
+}
+
+.current-context h3 {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--foreground);
+  margin-bottom: 10px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.context-info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.context-id {
+  font-size: var(--font-size-sm);
+  font-weight: 500;
+  color: var(--foreground);
+}
+
+.context-url {
+  font-size: 13px;
+  color: var(--muted-foreground);
+}

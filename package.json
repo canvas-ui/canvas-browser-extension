@@ -7,6 +7,7 @@
     "build": "cross-env NODE_ENV='production' node build.mjs",
     "build:dev": "cross-env NODE_ENV='dev' node build.mjs",
     "clean": "rimraf build packages",
+    "sync:theme": "node scripts/sync-theme.mjs",
     "test": "node --test \"tests/**/*.test.js\"",
     "lint": "eslint src/ --ext .js,.mjs",
     "lint:fix": "eslint src/ --ext .js,.mjs --fix",

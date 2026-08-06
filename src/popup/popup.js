@@ -5,6 +5,10 @@
 // asking the service worker for it — waking an idle MV3 worker is exactly the
 // latency the cache exists to remove.
 import { browserStorage } from '../background/modules/browser-storage.js';
+// Theming. The attributes are already on <html> by the time this module runs —
+// ../theme/theme-init.js stamps them before first paint — so this is only here
+// for the scheme toggle and to follow changes made elsewhere.
+import { updateTheme, watchTheme } from '../theme/apply-theme.js';
 
 // Import FuzzySearch for fuzzy search
 import FuzzySearch from './fuse.js';
@@ -43,7 +47,7 @@ function createSvgIcon(pathsStr, size = 14) {
 let connectionStatus, connectionText, contextId, contextUrl;
 let searchInput, sendNewTabsToCanvas, openTabsAddedToCanvas, showSyncedTabs, showHiddenTabs, showAllCanvasTabs;
 let browserToCanvasList, canvasToBrowserList;
-let syncAllBtn, syncToAllBtn, closeAllBtn, openAllBtn, canvasPrevPageBtn, canvasNextPageBtn, settingsBtn, dockBtn, logoBtn, selectorBtn, addPageBtn;
+let syncAllBtn, syncToAllBtn, closeAllBtn, openAllBtn, canvasPrevPageBtn, canvasNextPageBtn, settingsBtn, dockBtn, logoBtn, selectorBtn, addPageBtn, schemeBtn;
 let browserBulkActions, canvasBulkActions;
 let syncSelectedBtn, syncToSelectedBtn, syncCloseSelectedBtn, closeSelectedBtn, openSelectedBtn, removeSelectedBtn, deleteSelectedBtn;
 let selectAllBrowser, selectAllCanvas;
@@ -307,6 +311,7 @@ function initializeElements() {
   showAllCanvasTabs = document.getElementById('showAllCanvasTabs');
   selectorBtn = document.getElementById('selectorBtn');
   settingsBtn = document.getElementById('settingsBtn');
+  schemeBtn = document.getElementById('schemeBtn');
   dockBtn = document.getElementById('dockBtn');
   if (dockBtn && !isPopupView()) dockBtn.style.display = 'none';
 
@@ -393,6 +398,20 @@ function setupEventListeners() {
   // Settings button
   settingsBtn.addEventListener('click', openSettingsPage);
   dockBtn?.addEventListener('click', handleDockClick);
+
+  // Light/dark toggle. Deliberately resolves 'system' to a concrete scheme
+  // rather than cycling through it: a two-state button that sometimes lands on
+  // "whatever the OS says" is a button whose next click you cannot predict.
+  // Settings › Appearance is where you opt back into following the OS.
+  schemeBtn?.addEventListener('click', () => {
+    const current = document.documentElement.dataset.scheme === 'dark' ? 'dark' : 'light';
+    updateTheme({ scheme: current === 'dark' ? 'light' : 'dark' });
+  });
+
+  // Follow theme changes made in the settings page. Matters for the side panel,
+  // which stays open while you edit settings in a tab; the popup usually closes
+  // first, but costs nothing.
+  watchTheme();
 
   // Context URL click - navigate to tree view
   contextUrl.addEventListener('click', handleContextUrlClick);

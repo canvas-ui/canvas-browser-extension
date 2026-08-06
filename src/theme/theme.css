@@ -1,0 +1,2126 @@
+/**
+ * GENERATED FILE — do not edit.
+ *
+ * The Canvas design-token layer, vendored from canvas-web. Regenerate with:
+ *   npm run sync:theme
+ *
+ * source      canvas-web src/theme/css
+ * synced-from 52a7539
+ * source-hash afce8f9bba008b09
+ * files       18
+ *
+ * Tailwind's @theme / @utility / @custom-variant constructs have been unwrapped
+ * or stripped by scripts/sync-theme.mjs — see that file for why a plain copy
+ * would silently lose half the tokens. Import order is preserved from the
+ * source's index.css and is load-bearing: every selector here has specificity
+ * (0,1,0), so order alone decides whether a theme or a density value wins.
+ *
+ * When the pnpm monorepo migration lands, this file and its generator go away
+ * in favour of a workspace package shared with the web app.
+ */
+
+/* ═══ primitives.css ══════════════════════════════════════════════════════ */
+
+/**
+ * Tier 1 — Primitives.
+ *
+ * Raw, un-opinionated ramps. These carry no meaning ("what colour is it"),
+ * only value. Components must NEVER reference a primitive directly; they
+ * consume Tier 2 semantic tokens, which themes remap. Primitives exist so
+ * theme authors have a consistent vocabulary to build a palette from, and so
+ * data-driven colour (layer swatches, charts) has a fixed reference set.
+ *
+ * Colour space is OKLCH throughout: perceptually uniform, so a ramp step is a
+ * consistent lightness change across hues, and interpolation between two
+ * ramp entries never dips through grey the way sRGB/HSL does.
+ *
+ * Ramp convention: 50 = lightest, 950 = darkest, matching every mainstream
+ * design system. Dark themes invert *semantics*, not the ramp.
+ */
+
+:root {
+  /* ── Neutral ─────────────────────────────────────────────────────────── */
+  --p-neutral-0: oklch(1 0 0);
+  --p-neutral-50: oklch(0.985 0.001 286);
+  --p-neutral-100: oklch(0.967 0.002 286);
+  --p-neutral-200: oklch(0.92 0.004 286);
+  --p-neutral-300: oklch(0.871 0.006 286);
+  --p-neutral-400: oklch(0.705 0.014 286);
+  --p-neutral-500: oklch(0.552 0.015 286);
+  --p-neutral-600: oklch(0.442 0.015 286);
+  --p-neutral-700: oklch(0.37 0.013 286);
+  --p-neutral-800: oklch(0.274 0.011 286);
+  --p-neutral-900: oklch(0.21 0.008 286);
+  --p-neutral-950: oklch(0.141 0.005 286);
+  --p-neutral-1000: oklch(0 0 0);
+
+  /* ── Accents ─────────────────────────────────────────────────────────── */
+  --p-teal-300: oklch(0.855 0.108 187);
+  --p-teal-400: oklch(0.777 0.128 184);
+  --p-teal-500: oklch(0.704 0.135 183);
+  --p-teal-600: oklch(0.6 0.118 184);
+  --p-teal-700: oklch(0.511 0.096 186);
+
+  --p-blue-300: oklch(0.809 0.105 252);
+  --p-blue-400: oklch(0.707 0.153 254);
+  --p-blue-500: oklch(0.623 0.188 260);
+  --p-blue-600: oklch(0.546 0.215 263);
+  --p-blue-700: oklch(0.488 0.203 264);
+
+  --p-green-300: oklch(0.871 0.15 154);
+  --p-green-400: oklch(0.792 0.184 152);
+  --p-green-500: oklch(0.723 0.192 150);
+  --p-green-600: oklch(0.627 0.17 149);
+  --p-green-700: oklch(0.527 0.143 150);
+
+  --p-amber-300: oklch(0.879 0.169 92);
+  --p-amber-400: oklch(0.828 0.189 85);
+  --p-amber-500: oklch(0.769 0.188 70);
+  --p-amber-600: oklch(0.666 0.179 58);
+  --p-amber-700: oklch(0.555 0.163 49);
+
+  --p-red-300: oklch(0.808 0.114 20);
+  --p-red-400: oklch(0.704 0.191 22);
+  --p-red-500: oklch(0.637 0.237 25);
+  --p-red-600: oklch(0.577 0.245 27);
+  --p-red-700: oklch(0.505 0.213 27);
+
+  --p-violet-400: oklch(0.702 0.183 294);
+  --p-violet-500: oklch(0.606 0.25 292);
+  --p-violet-600: oklch(0.541 0.281 293);
+
+  /* ── Non-colour primitives ───────────────────────────────────────────── */
+  /* Unitless ratio scale. Themes pick a base and derive from it, so a
+     "compact" theme shrinks everything coherently instead of per-property. */
+  --p-scale-0: 0;
+  --p-scale-px: 1px;
+  --p-scale-1: 0.25rem;
+  --p-scale-2: 0.5rem;
+  --p-scale-3: 0.75rem;
+  --p-scale-4: 1rem;
+  --p-scale-5: 1.25rem;
+  --p-scale-6: 1.5rem;
+  --p-scale-8: 2rem;
+  --p-scale-10: 2.5rem;
+  --p-scale-12: 3rem;
+  --p-scale-16: 4rem;
+}
+
+/* ═══ base.css ════════════════════════════════════════════════════════════ */
+
+/**
+ * Base defaults.
+ *
+ * Every Tier-2 token gets a value here, on `:root`. Two reasons:
+ *
+ * 1. The app must render correctly before any theme attribute is applied —
+ *    during the first paint, in a Tauri window whose host hasn't called
+ *    `applyTheme` yet, in Storybook, in a test renderer. A missing custom
+ *    property resolves to nothing, not to a sensible default, so an unthemed
+ *    render without these would be unstyled text on a transparent background.
+ * 2. Themes then only declare what they actually change. A new theme is a
+ *    palette, not a 90-line transcription of the type scale.
+ *
+ * Values here mirror the `canvas` light theme.
+ */
+
+:root {
+  /* ── Shape ───────────────────────────────────────────────────────────── */
+  --radius: 0.5rem;
+
+  /* ── Typography ──────────────────────────────────────────────────────── */
+  --font-family-sans: 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto,
+    'Helvetica Neue', Arial, sans-serif;
+  --font-family-mono: ui-monospace, 'JetBrains Mono', 'SF Mono', Menlo, Consolas, monospace;
+
+  --font-size-2xs: 0.6875rem;
+  --line-height-2xs: 1rem;
+  --font-size-xs: 0.75rem;
+  --line-height-xs: 1rem;
+  --font-size-sm: 0.875rem;
+  --line-height-sm: 1.25rem;
+  --font-size-base: 1rem;
+  --line-height-base: 1.5rem;
+  --font-size-lg: 1.125rem;
+  --line-height-lg: 1.75rem;
+  --font-size-xl: 1.25rem;
+  --line-height-xl: 1.75rem;
+  --font-size-2xl: 1.5rem;
+  --line-height-2xl: 2rem;
+  --font-size-3xl: 1.875rem;
+  --line-height-3xl: 2.25rem;
+  --font-size-4xl: 2.25rem;
+  --line-height-4xl: 2.5rem;
+  --font-size-5xl: 3rem;
+  --line-height-5xl: 1;
+
+  /* ── Motion ──────────────────────────────────────────────────────────── */
+  --motion-scale: 1;
+
+  /* ── Colour fallback (canvas / light) ────────────────────────────────── */
+  --background: var(--p-neutral-0);
+  --foreground: var(--p-neutral-1000);
+  --card: var(--p-neutral-0);
+  --card-foreground: var(--p-neutral-1000);
+  --popover: var(--p-neutral-0);
+  --popover-foreground: var(--p-neutral-1000);
+  --desk: var(--p-neutral-200);
+
+  --primary: var(--p-neutral-1000);
+  --primary-foreground: var(--p-neutral-0);
+  --secondary: var(--p-teal-500);
+  --secondary-foreground: var(--p-neutral-1000);
+  --muted: var(--p-neutral-100);
+  --muted-foreground: var(--p-neutral-600);
+  --accent: var(--p-neutral-100);
+  --accent-foreground: var(--p-neutral-1000);
+
+  --destructive: var(--p-red-600);
+  --destructive-foreground: var(--p-neutral-0);
+  --destructive-subtle: oklch(from var(--p-red-500) 0.96 0.03 h);
+  --success: var(--p-green-600);
+  --success-foreground: var(--p-neutral-0);
+  --success-subtle: oklch(from var(--p-green-500) 0.96 0.03 h);
+  --warning: var(--p-amber-600);
+  --warning-foreground: var(--p-neutral-1000);
+  --warning-subtle: oklch(from var(--p-amber-500) 0.96 0.04 h);
+  --info: var(--p-blue-600);
+  --info-foreground: var(--p-neutral-0);
+  --info-subtle: oklch(from var(--p-blue-500) 0.96 0.03 h);
+
+  --border: var(--p-neutral-200);
+  --input: var(--p-neutral-300);
+  --ring: var(--p-neutral-1000);
+  --scrim: oklch(0 0 0 / 0.32);
+  --scrim-foreground: oklch(1 0 0);
+
+  --shadow-color: var(--p-neutral-1000);
+  --shadow-strength: 0.12;
+}
+
+/**
+ * Dark is the default when the host expresses no preference but the OS does.
+ * Scoped to `:root:not([data-scheme])` so it only ever acts as a fallback —
+ * the instant the provider writes an explicit `data-scheme`, the user's choice
+ * wins and this rule stops matching.
+ */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-scheme]) {
+    color-scheme: dark;
+
+    --background: var(--p-neutral-950);
+    --foreground: var(--p-neutral-50);
+    --card: var(--p-neutral-900);
+    --card-foreground: var(--p-neutral-50);
+    --popover: var(--p-neutral-900);
+    --popover-foreground: var(--p-neutral-50);
+    --desk: var(--p-neutral-1000);
+
+    --primary: var(--p-neutral-50);
+    --primary-foreground: var(--p-neutral-950);
+    --secondary: var(--p-teal-400);
+    --secondary-foreground: var(--p-neutral-950);
+    --muted: var(--p-neutral-800);
+    --muted-foreground: var(--p-neutral-400);
+    --accent: var(--p-neutral-800);
+    --accent-foreground: var(--p-neutral-50);
+
+    --destructive: var(--p-red-400);
+    --destructive-foreground: var(--p-neutral-950);
+    --destructive-subtle: oklch(from var(--p-red-500) 0.28 0.07 h);
+    --success: var(--p-green-400);
+    --success-foreground: var(--p-neutral-950);
+    --success-subtle: oklch(from var(--p-green-500) 0.28 0.06 h);
+    --warning: var(--p-amber-400);
+    --warning-foreground: var(--p-neutral-950);
+    --warning-subtle: oklch(from var(--p-amber-500) 0.28 0.06 h);
+    --info: var(--p-blue-400);
+    --info-foreground: var(--p-neutral-950);
+    --info-subtle: oklch(from var(--p-blue-500) 0.28 0.07 h);
+
+    --border: var(--p-neutral-800);
+    --input: var(--p-neutral-700);
+    --ring: var(--p-neutral-400);
+    --scrim: oklch(0 0 0 / 0.6);
+    --scrim-foreground: oklch(1 0 0);
+
+    --shadow-color: oklch(0 0 0);
+    --shadow-strength: 0.5;
+  }
+}
+
+/* ═══ layout.css ══════════════════════════════════════════════════════════ */
+
+/**
+ * Layout & density.
+ *
+ * This is what lets a theme change *shape*, not just colour. Shell geometry,
+ * control sizing and spacing rhythm are all tokens, so a theme (or the density
+ * setting) can turn a roomy touch layout into a dense desktop one without any
+ * component knowing it happened.
+ *
+ * Density is a first-class axis, independent of theme and colour scheme:
+ *
+ *   compact      information-dense desktop work — the file manager, admin tables
+ *   comfortable  the default; balanced for mouse use
+ *   touch        finger-sized targets for phones, tablets and Tauri on a 2-in-1
+ *
+ * `touch` is not merely "bigger". Hit targets go to 44px (the floor both Apple
+ * HIG and Material accessibility guidance land on), and rails widen enough that
+ * an icon button clears its neighbours by more than a fingertip's slop.
+ */
+
+:root {
+  /* ── Shell geometry ──────────────────────────────────────────────────── */
+  /* Named for role, not for the old m0/m1/t0/t1 shorthand, which required a
+     lookup table to read. No aliases: every call site was migrated. */
+  --spacing-rail: var(--layout-rail-width);
+  --spacing-menu-panel: var(--layout-menu-panel-width);
+  --spacing-menu-subpanel: var(--layout-menu-subpanel-width);
+  --spacing-toolbox-rail: var(--layout-toolbox-rail-width);
+  --spacing-toolbox-panel: var(--layout-toolbox-panel-width);
+
+  /* ── Control sizing ──────────────────────────────────────────────────── */
+  --spacing-control-sm: var(--control-height-sm);
+  --spacing-control: var(--control-height-md);
+  --spacing-control-lg: var(--control-height-lg);
+  /* The minimum any interactive element may be on a touch pointer. */
+  --spacing-touch-target: var(--touch-target-min);
+
+  /* ── Spacing rhythm ──────────────────────────────────────────────────── */
+  --spacing-shell: var(--layout-gap-shell);
+  --spacing-page: var(--layout-pad-page);
+  --spacing-card: var(--layout-pad-card);
+  --spacing-row: var(--layout-row-height);
+
+  /* ── Safe-area anchors ───────────────────────────────────────────────── */
+  /* Floating chrome has to clear the home indicator / gesture bar *and* keep a
+     minimum gutter of its own — `max()` of the two, not a sum, or the control
+     drifts far up the screen on a notched device.
+     These exist as tokens because the app had nine hand-written variants of
+     this expression, most of them missing the `0px` fallback on `env()`, which
+     makes the whole declaration invalid on engines without safe-area support. */
+  --spacing-safe-bottom: var(--safe-bottom);
+  --spacing-safe-top: var(--safe-top);
+  /* Right-hand FAB stack. */
+  --spacing-fab-inset: max(1rem, var(--safe-bottom));
+  /* Left-hand rail toggle, which sits tighter into the corner. */
+  --spacing-rail-inset: max(0.5rem, var(--safe-bottom));
+  /* A control stacked directly above the rail toggle (toggle is 3rem + gap). */
+  --spacing-rail-stack: calc(max(0.5rem, var(--safe-bottom)) + 3.5rem);
+
+  /* ── Breakpoints ─────────────────────────────────────────────────────── */
+  /* Named by the device class they describe. The raw numbers stay Tailwind's
+     defaults so the 245 existing `md:`/`max-md:` prefixes keep their meaning. */
+  --breakpoint-sm: 40rem;
+  --breakpoint-md: 48rem;
+  --breakpoint-lg: 64rem;
+  --breakpoint-xl: 80rem;
+  --breakpoint-2xl: 96rem;
+}
+
+/**
+ * Baseline geometry (the `comfortable` density) plus the safe-area plumbing
+ * every surface that touches a screen edge needs. `env(safe-area-inset-*)`
+ * resolves to 0 outside a notched viewport, so these are safe to use
+ * unconditionally — in the browser, as an installed PWA, and in a Tauri window
+ * with a transparent titlebar.
+ *
+ * Themes override these (see ./themes/terminal.css); the explicit density
+ * choice in ./density.css then overrides the theme. That precedence is
+ * enforced purely by import order in ./index.css — read the note there before
+ * moving anything.
+ */
+:root {
+  --layout-rail-width: 3rem;
+  --layout-menu-panel-width: 17.5rem;
+  --layout-menu-subpanel-width: 20rem;
+  --layout-toolbox-rail-width: 3rem;
+  --layout-toolbox-panel-width: 31.25rem;
+
+  --control-height-sm: 1.75rem;
+  --control-height-md: 2.25rem;
+  --control-height-lg: 2.75rem;
+  --touch-target-min: 2.25rem;
+
+  --layout-gap-shell: 0.5rem;
+  --layout-pad-page: 1.5rem;
+  --layout-pad-card: 1rem;
+  --layout-row-height: 2.25rem;
+
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-right: env(safe-area-inset-right, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-left: env(safe-area-inset-left, 0px);
+}
+
+/* ═══ viewport.css ════════════════════════════════════════════════════════ */
+
+/**
+ * Viewport height tokens.
+ *
+ * Two problems solved here.
+ *
+ * 1. `vh` is wrong on mobile. It resolves against the *large* viewport — the
+ *    height with browser chrome collapsed — so a `max-h-[90vh]` dialog is
+ *    taller than what is actually visible while the URL bar is showing. The
+ *    bottom of the dialog, which is where Save and Cancel live, sits off
+ *    screen with no way to reach it. This is the single most common Android
+ *    PWA layout bug and the app had 15 instances of it.
+ *
+ *    `dvh` tracks the *dynamic* viewport, so the element always fits.
+ *
+ * 2. `dvh` needs Chromium 108+ / Safari 15.4+. Canvas ships to Huawei devices
+ *    that may be on an older Chromium fork or on ArkWeb, so it cannot be used
+ *    unguarded. `@supports` is evaluated at parse time, which makes this a
+ *    genuine progressive enhancement: old engines keep `vh` (imperfect but
+ *    functional), new engines get `dvh`.
+ *
+ *    The two-declaration trick (`--x: 100vh; --x: 100dvh;`) does NOT work
+ *    here — a custom property stores any valid token sequence and only fails
+ *    at var() substitution time, by which point the fallback is long gone.
+ *    Same reason ./fallback.css exists.
+ *
+ * The named fractions replace six arbitrary ratios (50/60/65/70/85/90) that
+ * accumulated over time with three statements of intent. Resist adding more:
+ * if a surface needs its own ratio, it usually wants a different layout.
+ */
+
+:root {
+  --viewport-h: 100vh;
+}
+
+@supports (height: 100dvh) {
+  :root {
+    --viewport-h: 100dvh;
+  }
+}
+
+:root {
+  /* Full-bleed surfaces: the app shell, immersive viewers. */
+  --spacing-viewport: var(--viewport-h);
+  /* Dialogs and floating overlays — leaves a gutter so the surface reads as
+     floating rather than pinned to the screen edges. */
+  --spacing-viewport-modal: calc(var(--viewport-h) * 0.9);
+  /* Embedded scrollable content: PDF pages, media, log output, code. */
+  --spacing-viewport-pane: calc(var(--viewport-h) * 0.7);
+  /* Floating cards that take most of the screen but stay clearly detached
+     from it — the B5 capture card, docked pickers, side cards. */
+  --spacing-viewport-card: calc(var(--viewport-h) * 0.85);
+  /* A pane that should occupy roughly half the screen before scrolling. */
+  --spacing-viewport-half: calc(var(--viewport-h) * 0.5);
+}
+
+/* ═══ components.css ══════════════════════════════════════════════════════ */
+
+/**
+ * Tier 3 — Component tokens.
+ *
+ * The escape valve between "one global radius knob" and "fork the component".
+ * A theme that wants square buttons but round cards, or a 3px focus ring, sets
+ * these; component source never changes.
+ *
+ * Defaults all derive from Tier 2, so a theme that ignores this file entirely
+ * still gets a coherent result — these only matter when a theme wants a
+ * component to diverge from the global rhythm.
+ *
+ * Rule for adding one: only when a component genuinely needs to vary
+ * independently of the semantic scale. Anything that should move in lockstep
+ * with the rest of the UI belongs in Tier 2, not here.
+ */
+
+:root {
+  /* ── Focus ───────────────────────────────────────────────────────────── */
+  /* Focus is an accessibility guarantee, not decoration. It gets its own
+     tokens so a high-contrast theme can thicken the ring globally. */
+  --focus-ring-width: 2px;
+  --focus-ring-offset: 2px;
+  --focus-ring-color: var(--ring);
+
+  /* ── Button ──────────────────────────────────────────────────────────── */
+  --btn-radius: var(--radius-md);
+  --btn-height: var(--control-height-md);
+  --btn-padding-x: 1rem;
+  --btn-font-weight: 500;
+  --btn-border-width: 1px;
+
+  /* ── Input ───────────────────────────────────────────────────────────── */
+  --input-radius: var(--radius-md);
+  --input-height: var(--control-height-md);
+  --input-border-width: 1px;
+
+  /* ── Card ────────────────────────────────────────────────────────────── */
+  --card-radius: var(--radius-lg);
+  --card-border-width: 1px;
+  --card-padding: var(--layout-pad-card);
+  --card-shadow: var(--shadow-elevation-1);
+
+  /* ── Sheet — the "page" surfaces float on the desk ───────────────────── */
+  --sheet-radius: var(--radius-xl);
+  --sheet-shadow: var(--shadow-elevation-2);
+
+  /* ── Panel — docked drawers and side panels ──────────────────────────── */
+  --panel-radius: var(--radius-xl);
+  --panel-shadow: var(--shadow-elevation-4);
+  --panel-shadow-overlay: var(--shadow-elevation-5);
+
+  /* ── Row — tree nodes, list items, table rows ────────────────────────── */
+  --row-radius: var(--radius-sm);
+  --row-height: var(--layout-row-height);
+  --row-padding-x: 0.5rem;
+}
+
+/* ═══ themes/canvas.css ═══════════════════════════════════════════════════ */
+
+/**
+ * Canvas — the default theme.
+ *
+ * Preserves the app's established look: stark black-and-white surfaces with a
+ * teal support accent, sheets of white "paper" floating on a grey desk.
+ *
+ * Also serves as the reference implementation. Every token a theme may set is
+ * present here with a comment, so a new theme can be written by copying this
+ * file and changing values — nothing is inherited implicitly from a base.
+ */
+
+[data-theme='canvas'] {
+  /* Single knob; ./semantic.css derives the whole radius scale from it.
+     Everything else (type scale, motion scale, font families) is inherited
+     from ../base.css — canvas is happy with the defaults. */
+  --radius: 0.5rem;
+}
+
+/* ── Light ─────────────────────────────────────────────────────────────── */
+/* Doubled selector matches both the root (`<html data-theme data-scheme>`)
+   and any nested scope (`<div data-scheme="dark">` inside a light page), so a
+   dark toolbox docked in a light shell needs no special-casing. */
+[data-theme='canvas'][data-scheme='light'],
+[data-theme='canvas'] [data-scheme='light'] {
+  color-scheme: light;
+
+  --background: var(--p-neutral-0);
+  --foreground: var(--p-neutral-1000);
+  --card: var(--p-neutral-0);
+  --card-foreground: var(--p-neutral-1000);
+  --popover: var(--p-neutral-0);
+  --popover-foreground: var(--p-neutral-1000);
+  --desk: var(--p-neutral-200);
+
+  --primary: var(--p-neutral-1000);
+  --primary-foreground: var(--p-neutral-0);
+  --secondary: var(--p-teal-500);
+  --secondary-foreground: var(--p-neutral-1000);
+  --muted: var(--p-neutral-100);
+  --muted-foreground: var(--p-neutral-600);
+  --accent: var(--p-neutral-100);
+  --accent-foreground: var(--p-neutral-1000);
+
+  --destructive: var(--p-red-600);
+  --destructive-foreground: var(--p-neutral-0);
+  --destructive-subtle: oklch(from var(--p-red-500) 0.96 0.03 h);
+  --success: var(--p-green-600);
+  --success-foreground: var(--p-neutral-0);
+  --success-subtle: oklch(from var(--p-green-500) 0.96 0.03 h);
+  --warning: var(--p-amber-600);
+  --warning-foreground: var(--p-neutral-1000);
+  --warning-subtle: oklch(from var(--p-amber-500) 0.96 0.04 h);
+  --info: var(--p-blue-600);
+  --info-foreground: var(--p-neutral-0);
+  --info-subtle: oklch(from var(--p-blue-500) 0.96 0.03 h);
+
+  --border: var(--p-neutral-200);
+  --input: var(--p-neutral-300);
+  --ring: var(--p-neutral-1000);
+  --scrim: oklch(0 0 0 / 0.32);
+  --scrim-foreground: oklch(1 0 0);
+
+  --shadow-color: var(--p-neutral-1000);
+  --shadow-strength: 0.12;
+}
+
+/* ── Dark ──────────────────────────────────────────────────────────────── */
+[data-theme='canvas'][data-scheme='dark'],
+[data-theme='canvas'] [data-scheme='dark'] {
+  color-scheme: dark;
+
+  /* Surfaces get *lighter* as they rise, the inverse of the light scheme —
+     shadow alone cannot convey elevation on a dark background. */
+  --background: var(--p-neutral-950);
+  --foreground: var(--p-neutral-50);
+  --card: var(--p-neutral-900);
+  --card-foreground: var(--p-neutral-50);
+  --popover: var(--p-neutral-900);
+  --popover-foreground: var(--p-neutral-50);
+  --desk: var(--p-neutral-1000);
+
+  --primary: var(--p-neutral-50);
+  --primary-foreground: var(--p-neutral-950);
+  --secondary: var(--p-teal-400);
+  --secondary-foreground: var(--p-neutral-950);
+  --muted: var(--p-neutral-800);
+  --muted-foreground: var(--p-neutral-400);
+  --accent: var(--p-neutral-800);
+  --accent-foreground: var(--p-neutral-50);
+
+  /* Status hues shift lighter and less saturated: a mid-tone that passes
+     contrast on white fails badly on a near-black surface. */
+  --destructive: var(--p-red-400);
+  --destructive-foreground: var(--p-neutral-950);
+  --destructive-subtle: oklch(from var(--p-red-500) 0.28 0.07 h);
+  --success: var(--p-green-400);
+  --success-foreground: var(--p-neutral-950);
+  --success-subtle: oklch(from var(--p-green-500) 0.28 0.06 h);
+  --warning: var(--p-amber-400);
+  --warning-foreground: var(--p-neutral-950);
+  --warning-subtle: oklch(from var(--p-amber-500) 0.28 0.06 h);
+  --info: var(--p-blue-400);
+  --info-foreground: var(--p-neutral-950);
+  --info-subtle: oklch(from var(--p-blue-500) 0.28 0.07 h);
+
+  --border: var(--p-neutral-800);
+  --input: var(--p-neutral-700);
+  --ring: var(--p-neutral-400);
+  --scrim: oklch(0 0 0 / 0.6);
+  --scrim-foreground: oklch(1 0 0);
+
+  --shadow-color: oklch(0 0 0);
+  --shadow-strength: 0.5;
+}
+
+/* ═══ themes/nord.css ═════════════════════════════════════════════════════ */
+
+/**
+ * Nord — cool, low-contrast arctic palette.
+ *
+ * Demonstrates the colour axis in isolation: a complete palette swap and a
+ * softer corner radius, with every other token inherited. This is the shape
+ * most themes should take.
+ *
+ * Based on the Nord palette (nordtheme.com), converted to OKLCH.
+ */
+
+[data-theme='nord'] {
+  --radius: 0.625rem;
+}
+
+[data-theme='nord'][data-scheme='light'],
+[data-theme='nord'] [data-scheme='light'] {
+  color-scheme: light;
+
+  --background: oklch(0.976 0.006 251);
+  --foreground: oklch(0.309 0.026 261);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.309 0.026 261);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.309 0.026 261);
+  --desk: oklch(0.929 0.011 253);
+
+  --primary: oklch(0.588 0.056 244);
+  --primary-foreground: oklch(0.984 0.004 248);
+  --secondary: oklch(0.686 0.062 213);
+  --secondary-foreground: oklch(0.229 0.023 261);
+  --muted: oklch(0.929 0.011 253);
+  --muted-foreground: oklch(0.492 0.028 258);
+  --accent: oklch(0.906 0.017 251);
+  --accent-foreground: oklch(0.309 0.026 261);
+
+  --destructive: oklch(0.564 0.114 19);
+  --destructive-foreground: oklch(0.984 0.004 248);
+  --destructive-subtle: oklch(0.945 0.028 19);
+  --success: oklch(0.696 0.086 143);
+  --success-foreground: oklch(0.229 0.023 261);
+  --success-subtle: oklch(0.951 0.028 143);
+  --warning: oklch(0.788 0.093 74);
+  --warning-foreground: oklch(0.229 0.023 261);
+  --warning-subtle: oklch(0.957 0.032 74);
+  --info: oklch(0.638 0.071 235);
+  --info-foreground: oklch(0.984 0.004 248);
+  --info-subtle: oklch(0.947 0.023 235);
+
+  --border: oklch(0.885 0.017 252);
+  --input: oklch(0.83 0.019 252);
+  --ring: oklch(0.588 0.056 244);
+  --scrim: oklch(0.229 0.023 261 / 0.35);
+  --scrim-foreground: oklch(1 0 0);
+
+  --shadow-color: oklch(0.309 0.026 261);
+  --shadow-strength: 0.1;
+}
+
+[data-theme='nord'][data-scheme='dark'],
+[data-theme='nord'] [data-scheme='dark'] {
+  color-scheme: dark;
+
+  --background: oklch(0.279 0.024 261);
+  --foreground: oklch(0.925 0.011 252);
+  --card: oklch(0.322 0.024 259);
+  --card-foreground: oklch(0.925 0.011 252);
+  --popover: oklch(0.322 0.024 259);
+  --popover-foreground: oklch(0.925 0.011 252);
+  --desk: oklch(0.229 0.023 261);
+
+  --primary: oklch(0.755 0.062 224);
+  --primary-foreground: oklch(0.229 0.023 261);
+  --secondary: oklch(0.686 0.062 213);
+  --secondary-foreground: oklch(0.229 0.023 261);
+  --muted: oklch(0.365 0.024 258);
+  --muted-foreground: oklch(0.729 0.019 253);
+  --accent: oklch(0.404 0.025 257);
+  --accent-foreground: oklch(0.925 0.011 252);
+
+  --destructive: oklch(0.629 0.114 19);
+  --destructive-foreground: oklch(0.229 0.023 261);
+  --destructive-subtle: oklch(0.372 0.048 19);
+  --success: oklch(0.755 0.086 143);
+  --success-foreground: oklch(0.229 0.023 261);
+  --success-subtle: oklch(0.372 0.041 143);
+  --warning: oklch(0.826 0.093 74);
+  --warning-foreground: oklch(0.229 0.023 261);
+  --warning-subtle: oklch(0.383 0.044 74);
+  --info: oklch(0.708 0.071 235);
+  --info-foreground: oklch(0.229 0.023 261);
+  --info-subtle: oklch(0.372 0.039 235);
+
+  --border: oklch(0.372 0.024 258);
+  --input: oklch(0.46 0.026 257);
+  --ring: oklch(0.755 0.062 224);
+  --scrim: oklch(0.18 0.02 261 / 0.6);
+  --scrim-foreground: oklch(1 0 0);
+
+  --shadow-color: oklch(0.145 0.018 261);
+  --shadow-strength: 0.45;
+}
+
+/* ═══ themes/contrast.css ═════════════════════════════════════════════════ */
+
+/**
+ * High Contrast — accessibility theme.
+ *
+ * Targets WCAG AAA (7:1) for body text and 4.5:1 for large text and UI
+ * boundaries, well above the AA floor the default themes hold.
+ *
+ * Demonstrates the component-token axis: this theme changes the *construction*
+ * of components, not just their colour. Corners go square, shadows are removed
+ * entirely, borders and focus rings thicken. That matters because elevation
+ * conveyed only by a soft shadow is invisible to a low-vision user — the
+ * information has to move into a hard border instead.
+ */
+
+[data-theme='contrast'] {
+  --radius: 0;
+
+  /* Shadows carry no information here; borders do the work. */
+  --shadow-strength: 0;
+
+  --focus-ring-width: 3px;
+  --focus-ring-offset: 2px;
+
+  --btn-border-width: 2px;
+  --btn-font-weight: 600;
+  --input-border-width: 2px;
+  --card-border-width: 2px;
+
+  --card-shadow: none;
+  --sheet-shadow: none;
+  --panel-shadow: none;
+  --panel-shadow-overlay: none;
+}
+
+[data-theme='contrast'][data-scheme='light'],
+[data-theme='contrast'] [data-scheme='light'] {
+  color-scheme: light;
+
+  --background: oklch(1 0 0);
+  --foreground: oklch(0 0 0);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0 0 0);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0 0 0);
+  --desk: oklch(0.88 0 0);
+
+  --primary: oklch(0 0 0);
+  --primary-foreground: oklch(1 0 0);
+  --secondary: oklch(0.32 0.11 250);
+  --secondary-foreground: oklch(1 0 0);
+  --muted: oklch(0.94 0 0);
+  /* Deliberately dark for a "muted" role — 7:1 on white. Muted must still be
+     legible; it signals hierarchy, not that the text is optional. */
+  --muted-foreground: oklch(0.36 0 0);
+  --accent: oklch(0.9 0 0);
+  --accent-foreground: oklch(0 0 0);
+
+  --destructive: oklch(0.42 0.2 27);
+  --destructive-foreground: oklch(1 0 0);
+  --destructive-subtle: oklch(0.94 0.03 27);
+  --success: oklch(0.4 0.12 150);
+  --success-foreground: oklch(1 0 0);
+  --success-subtle: oklch(0.94 0.03 150);
+  --warning: oklch(0.44 0.11 70);
+  --warning-foreground: oklch(1 0 0);
+  --warning-subtle: oklch(0.94 0.04 70);
+  --info: oklch(0.4 0.16 258);
+  --info-foreground: oklch(1 0 0);
+  --info-subtle: oklch(0.94 0.03 258);
+
+  --border: oklch(0.22 0 0);
+  --input: oklch(0.22 0 0);
+  --ring: oklch(0.32 0.16 258);
+  --scrim: oklch(0 0 0 / 0.7);
+  --scrim-foreground: oklch(1 0 0);
+
+  --shadow-color: oklch(0 0 0);
+}
+
+[data-theme='contrast'][data-scheme='dark'],
+[data-theme='contrast'] [data-scheme='dark'] {
+  color-scheme: dark;
+
+  --background: oklch(0 0 0);
+  --foreground: oklch(1 0 0);
+  --card: oklch(0.08 0 0);
+  --card-foreground: oklch(1 0 0);
+  --popover: oklch(0.08 0 0);
+  --popover-foreground: oklch(1 0 0);
+  --desk: oklch(0.14 0 0);
+
+  --primary: oklch(1 0 0);
+  --primary-foreground: oklch(0 0 0);
+  --secondary: oklch(0.82 0.13 200);
+  --secondary-foreground: oklch(0 0 0);
+  --muted: oklch(0.18 0 0);
+  --muted-foreground: oklch(0.82 0 0);
+  --accent: oklch(0.24 0 0);
+  --accent-foreground: oklch(1 0 0);
+
+  --destructive: oklch(0.75 0.16 25);
+  --destructive-foreground: oklch(0 0 0);
+  --destructive-subtle: oklch(0.24 0.07 25);
+  --success: oklch(0.85 0.2 148);
+  --success-foreground: oklch(0 0 0);
+  --success-subtle: oklch(0.24 0.06 148);
+  --warning: oklch(0.88 0.17 90);
+  --warning-foreground: oklch(0 0 0);
+  --warning-subtle: oklch(0.26 0.06 90);
+  --info: oklch(0.82 0.13 235);
+  --info-foreground: oklch(0 0 0);
+  --info-subtle: oklch(0.24 0.07 235);
+
+  --border: oklch(0.85 0 0);
+  --input: oklch(0.85 0 0);
+  --ring: oklch(0.9 0.16 100);
+  --scrim: oklch(0 0 0 / 0.8);
+  --scrim-foreground: oklch(1 0 0);
+
+  --shadow-color: oklch(0 0 0);
+}
+
+/* ═══ themes/terminal.css ═════════════════════════════════════════════════ */
+
+/**
+ * Terminal — dense, monospaced, utilitarian.
+ *
+ * Demonstrates the layout and typography axes. This theme overrides shell
+ * geometry, the type scale, row height and motion — proving a theme can change
+ * how the app is *laid out*, not only how it is coloured. Nothing in any
+ * component is aware this theme exists.
+ *
+ * Intended for the file-manager and admin surfaces on a large desktop display,
+ * where rows-per-screen matters more than breathing room.
+ */
+
+[data-theme='terminal'] {
+  --radius: 0.125rem;
+
+  /* ── Typography: monospace everywhere, one step down ──────────────────── */
+  --font-family-sans: ui-monospace, 'JetBrains Mono', 'SF Mono', Menlo, Consolas, monospace;
+
+  --font-size-2xs: 0.625rem;
+  --line-height-2xs: 0.875rem;
+  --font-size-xs: 0.6875rem;
+  --line-height-xs: 0.9375rem;
+  --font-size-sm: 0.8125rem;
+  --line-height-sm: 1.125rem;
+  --font-size-base: 0.875rem;
+  --line-height-base: 1.25rem;
+  --font-size-lg: 1rem;
+  --line-height-lg: 1.375rem;
+  --font-size-xl: 1.125rem;
+  --line-height-xl: 1.5rem;
+  --font-size-2xl: 1.25rem;
+  --line-height-2xl: 1.625rem;
+  --font-size-3xl: 1.5rem;
+  --line-height-3xl: 1.875rem;
+  --font-size-4xl: 1.75rem;
+  --line-height-4xl: 2.125rem;
+  --font-size-5xl: 2.25rem;
+  --line-height-5xl: 1.1;
+
+  /* ── Layout: tighter shell, more rows per screen ─────────────────────── */
+  --layout-rail-width: 2.5rem;
+  --layout-menu-panel-width: 15rem;
+  --layout-menu-subpanel-width: 17rem;
+  --layout-toolbox-rail-width: 2.5rem;
+  --layout-toolbox-panel-width: 30rem;
+
+  --layout-gap-shell: 0.25rem;
+  --layout-pad-page: 0.75rem;
+  --layout-pad-card: 0.625rem;
+  --layout-row-height: 1.625rem;
+
+  --control-height-sm: 1.375rem;
+  --control-height-md: 1.75rem;
+  --control-height-lg: 2.125rem;
+
+  /* ── Chrome: flat, bordered, near-instant ────────────────────────────── */
+  --motion-scale: 0.6;
+  --shadow-strength: 0.06;
+  --card-shadow: none;
+  --sheet-shadow: none;
+  --btn-padding-x: 0.625rem;
+  --btn-font-weight: 400;
+  --row-radius: 0;
+  --row-padding-x: 0.375rem;
+}
+
+[data-theme='terminal'][data-scheme='light'],
+[data-theme='terminal'] [data-scheme='light'] {
+  color-scheme: light;
+
+  --background: oklch(0.995 0.002 106);
+  --foreground: oklch(0.22 0.008 106);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.22 0.008 106);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.22 0.008 106);
+  --desk: oklch(0.93 0.004 106);
+
+  --primary: oklch(0.42 0.13 155);
+  --primary-foreground: oklch(0.995 0.002 106);
+  --secondary: oklch(0.5 0.11 232);
+  --secondary-foreground: oklch(0.995 0.002 106);
+  --muted: oklch(0.955 0.003 106);
+  --muted-foreground: oklch(0.48 0.008 106);
+  --accent: oklch(0.93 0.012 155);
+  --accent-foreground: oklch(0.22 0.008 106);
+
+  --destructive: oklch(0.52 0.2 27);
+  --destructive-foreground: oklch(0.995 0.002 106);
+  --destructive-subtle: oklch(0.95 0.035 27);
+  --success: oklch(0.5 0.14 150);
+  --success-foreground: oklch(0.995 0.002 106);
+  --success-subtle: oklch(0.95 0.035 150);
+  --warning: oklch(0.58 0.14 62);
+  --warning-foreground: oklch(0.995 0.002 106);
+  --warning-subtle: oklch(0.95 0.04 62);
+  --info: oklch(0.5 0.15 250);
+  --info-foreground: oklch(0.995 0.002 106);
+  --info-subtle: oklch(0.95 0.032 250);
+
+  --border: oklch(0.87 0.005 106);
+  --input: oklch(0.8 0.006 106);
+  --ring: oklch(0.42 0.13 155);
+  --scrim: oklch(0.22 0.008 106 / 0.4);
+  --scrim-foreground: oklch(1 0 0);
+
+  --shadow-color: oklch(0.22 0.008 106);
+}
+
+[data-theme='terminal'][data-scheme='dark'],
+[data-theme='terminal'] [data-scheme='dark'] {
+  color-scheme: dark;
+
+  --background: oklch(0.17 0.006 152);
+  --foreground: oklch(0.89 0.02 152);
+  --card: oklch(0.21 0.008 152);
+  --card-foreground: oklch(0.89 0.02 152);
+  --popover: oklch(0.21 0.008 152);
+  --popover-foreground: oklch(0.89 0.02 152);
+  --desk: oklch(0.12 0.005 152);
+
+  --primary: oklch(0.8 0.19 148);
+  --primary-foreground: oklch(0.14 0.01 152);
+  --secondary: oklch(0.75 0.12 220);
+  --secondary-foreground: oklch(0.14 0.01 152);
+  --muted: oklch(0.26 0.008 152);
+  --muted-foreground: oklch(0.66 0.02 152);
+  --accent: oklch(0.29 0.02 152);
+  --accent-foreground: oklch(0.89 0.02 152);
+
+  --destructive: oklch(0.7 0.19 25);
+  --destructive-foreground: oklch(0.14 0.01 152);
+  --destructive-subtle: oklch(0.28 0.07 25);
+  --success: oklch(0.8 0.19 148);
+  --success-foreground: oklch(0.14 0.01 152);
+  --success-subtle: oklch(0.28 0.06 148);
+  --warning: oklch(0.82 0.16 85);
+  --warning-foreground: oklch(0.14 0.01 152);
+  --warning-subtle: oklch(0.28 0.06 85);
+  --info: oklch(0.75 0.12 235);
+  --info-foreground: oklch(0.14 0.01 152);
+  --info-subtle: oklch(0.28 0.06 235);
+
+  --border: oklch(0.3 0.012 152);
+  --input: oklch(0.4 0.014 152);
+  --ring: oklch(0.8 0.19 148);
+  --scrim: oklch(0.08 0.004 152 / 0.7);
+  --scrim-foreground: oklch(1 0 0);
+
+  --shadow-color: oklch(0 0 0);
+}
+
+/* ═══ density.css ═════════════════════════════════════════════════════════ */
+
+/**
+ * Density overrides.
+ *
+ * Separate from ./layout.css because of where it must sit in the cascade.
+ * Every selector here is a single attribute — specificity (0,1,0) — identical
+ * to `:root` and to a theme's `[data-theme='…']` block. At equal specificity
+ * the cascade falls back to source order, so the file that is imported last
+ * wins. Density is the user's explicit choice, so it is imported after the
+ * themes and wins over a theme's own layout preferences.
+ *
+ * (This file exists because getting that order wrong is silent: the tokens
+ * still resolve, they just resolve to the loser's value.)
+ */
+
+[data-density='compact'] {
+  --layout-rail-width: 2.75rem;
+  --layout-menu-panel-width: 16rem;
+  --layout-menu-subpanel-width: 18rem;
+  --layout-toolbox-rail-width: 2.75rem;
+  --layout-toolbox-panel-width: 28rem;
+
+  --control-height-sm: 1.5rem;
+  --control-height-md: 1.875rem;
+  --control-height-lg: 2.25rem;
+  --touch-target-min: 1.875rem;
+
+  --layout-gap-shell: 0.375rem;
+  --layout-pad-page: 1rem;
+  --layout-pad-card: 0.75rem;
+  --layout-row-height: 1.875rem;
+
+  --motion-scale: 0.8;
+}
+
+[data-density='touch'] {
+  --layout-rail-width: 3.5rem;
+  --layout-menu-panel-width: 19rem;
+  --layout-menu-subpanel-width: 22rem;
+  --layout-toolbox-rail-width: 3.5rem;
+  --layout-toolbox-panel-width: 34rem;
+
+  --control-height-sm: 2.25rem;
+  --control-height-md: 2.75rem;
+  --control-height-lg: 3.25rem;
+  --touch-target-min: 2.75rem;
+
+  --layout-gap-shell: 0.625rem;
+  --layout-pad-page: 1.25rem;
+  --layout-pad-card: 1.125rem;
+  --layout-row-height: 2.75rem;
+}
+
+/**
+ * Coarse-pointer floor.
+ *
+ * Applies only when density has NOT been set explicitly (`data-density="auto"`
+ * or absent), so a user who deliberately chose `compact` on a touchscreen
+ * keeps it. Without this, plugging the app into a phone renders desktop-sized
+ * 28px hit targets that are genuinely hard to tap.
+ */
+@media (pointer: coarse) {
+  :root:not([data-density='compact']):not([data-density='comfortable']):not([data-density='touch']) {
+    --control-height-sm: 2.25rem;
+    --control-height-md: 2.75rem;
+    --control-height-lg: 3.25rem;
+    --touch-target-min: 2.75rem;
+    --layout-row-height: 2.75rem;
+  }
+}
+
+/* ═══ responsive.css ══════════════════════════════════════════════════════ */
+
+/**
+ * Viewport-driven adjustments.
+ *
+ * Layered after themes and density because it modifies whatever those two
+ * settled on, rather than expressing a preference of its own. A theme picks a
+ * type scale; this narrows it when there is no room for it.
+ *
+ * Kept deliberately small. Most responsive behaviour belongs in component
+ * markup (`md:` variants), where it is visible next to the thing it affects.
+ * Only changes that must apply uniformly across every screen live here.
+ */
+
+/**
+ * Compact display type below 30rem (480px).
+ *
+ * The scale is tuned for desktop, where a 30px page title reads as a heading.
+ * On a 360px-wide phone the same title eats most of the line and pushes real
+ * content below the fold — the workspace list spent its first screen on the
+ * word "Workspaces". Body sizes (base and below) are untouched: shrinking
+ * those would hurt legibility, which is the opposite of the goal.
+ *
+ * Applied at the token level rather than by editing 13 call sites, so every
+ * heading in the app moves together and new ones inherit the behaviour.
+ */
+@media (max-width: 29.999rem) {
+  :root {
+    --font-size-2xl: 1.25rem;
+    --line-height-2xl: 1.625rem;
+    --font-size-3xl: 1.5rem;
+    --line-height-3xl: 1.875rem;
+    --font-size-4xl: 1.75rem;
+    --line-height-4xl: 2.125rem;
+    --font-size-5xl: 2rem;
+    --line-height-5xl: 2.375rem;
+  }
+}
+
+/* ═══ semantic.css ════════════════════════════════════════════════════════ */
+
+/**
+ * Tier 2 — Semantic tokens (the theming contract).
+ *
+ * This file declares WHAT a token means, never what value it has. Themes
+ * supply the values (see ./themes/*.css); this is the interface between the
+ * two, and the only surface components are allowed to consume.
+ *
+ * The `@theme inline` block is what makes runtime theming work in Tailwind
+ * v4: `inline` emits utilities that reference `var(--background)` rather than
+ * copying its computed value at build time. Flip `--background` on any
+ * ancestor and every `bg-background` under it re-resolves — no rebuild, no
+ * duplicated stylesheet per theme, and nested scopes (a dark toolbox inside a
+ * light page) work for free.
+ *
+ * Adding a token: declare the fallback in `:root` inside a theme file, then
+ * map it here. Never add a raw value to this file.
+ */
+
+:root {
+  /* ── Surfaces & content ──────────────────────────────────────────────── */
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  /* The neutral surface that sheets/cards float on top of. */
+  --color-desk: var(--desk);
+
+  /* ── Interactive roles ───────────────────────────────────────────────── */
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+
+  /* ── Status roles ────────────────────────────────────────────────────── */
+  /* Each status carries a `-subtle` surface for tinted backgrounds (badges,
+     banners, row highlights) so callers stop reaching for `bg-red-50`, which
+     is invisible in a dark theme. */
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-destructive-subtle: var(--destructive-subtle);
+  --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
+  --color-success-subtle: var(--success-subtle);
+  --color-warning: var(--warning);
+  --color-warning-foreground: var(--warning-foreground);
+  --color-warning-subtle: var(--warning-subtle);
+  --color-info: var(--info);
+  --color-info-foreground: var(--info-foreground);
+  --color-info-subtle: var(--info-subtle);
+
+  /* ── Lines & focus ───────────────────────────────────────────────────── */
+  --color-border: var(--border);
+  /* The border colour of form controls, NOT a fill — every consumer writes
+     `border-input` against a transparent field. A theme that sets this to a
+     surface colour makes every input disappear. */
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  /* Scrims dim content behind overlays. Themed because a dark theme needs a
+     different veil opacity than a light one to read as "behind". */
+  --color-scrim: var(--scrim);
+  /* Content placed directly on the scrim (close buttons, captions). The veil
+     is dark in every theme, so this is near-white everywhere — but it is a
+     token, so a theme that lightens its scrim can flip it. */
+  --color-scrim-foreground: var(--scrim-foreground);
+
+  /* ── Radii ───────────────────────────────────────────────────────────── */
+  /* Derived from a single --radius knob: one theme value reshapes every
+     corner in the app, which is most of what "component design change" means
+     in practice. */
+  --radius-xs: calc(var(--radius) * 0.25);
+  --radius-sm: calc(var(--radius) * 0.5);
+  --radius-md: calc(var(--radius) * 0.75);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.5);
+  --radius-2xl: calc(var(--radius) * 2);
+  --radius-3xl: calc(var(--radius) * 3);
+
+  /* ── Typography ──────────────────────────────────────────────────────── */
+  --font-sans: var(--font-family-sans);
+  --font-mono: var(--font-family-mono);
+
+  --text-2xs: var(--font-size-2xs);
+  --text-2xs--line-height: var(--line-height-2xs);
+  --text-xs: var(--font-size-xs);
+  --text-xs--line-height: var(--line-height-xs);
+  --text-sm: var(--font-size-sm);
+  --text-sm--line-height: var(--line-height-sm);
+  --text-base: var(--font-size-base);
+  --text-base--line-height: var(--line-height-base);
+  --text-lg: var(--font-size-lg);
+  --text-lg--line-height: var(--line-height-lg);
+  --text-xl: var(--font-size-xl);
+  --text-xl--line-height: var(--line-height-xl);
+  --text-2xl: var(--font-size-2xl);
+  --text-2xl--line-height: var(--line-height-2xl);
+  --text-3xl: var(--font-size-3xl);
+  --text-3xl--line-height: var(--line-height-3xl);
+  --text-4xl: var(--font-size-4xl);
+  --text-4xl--line-height: var(--line-height-4xl);
+  --text-5xl: var(--font-size-5xl);
+  --text-5xl--line-height: var(--line-height-5xl);
+}
+
+/* ═══ data-palette.css ════════════════════════════════════════════════════ */
+
+/**
+ * Categorical data palette.
+ *
+ * Distinct from the semantic roles. `--color-success` means "this went well";
+ * `--color-data-3` means "this is category 3, and it is not category 4". Using
+ * `text-green-500` for a to-do document was conflating the two — it implied
+ * success, and it broke the moment a theme changed.
+ *
+ * Twelve hues, near-evenly spaced around the OKLCH hue circle at constant
+ * lightness and chroma. Constant lightness is the point: in HSL, yellow at 50%
+ * lightness is far brighter than blue at 50%, so a categorical set built from
+ * `*-500` Tailwind hues has some entries shouting and others whispering. Here
+ * every category carries the same visual weight, which is what "categorical"
+ * is supposed to mean.
+ *
+ * Lightness is raised and chroma lowered in dark schemes — a mid-tone that
+ * reads well on white is muddy on near-black.
+ *
+ * Assignment lives in code (see components/common/DocumentIcon.tsx), so a
+ * theme can restyle every document-type colour without knowing what a
+ * document type is.
+ */
+
+:root {
+  /* Lightness/chroma for *computed* categorical colours — hues derived at
+     runtime (hashing a timeline name to a stable hue, for instance) can't come
+     from the fixed slots below, but they still have to stay legible when the
+     scheme flips. Composing `oklch(var(--data-l) var(--data-c) <hue>)` gives
+     them the same contrast behaviour as the fixed slots for free. */
+  --data-l: 0.62;
+  --data-c: 0.15;
+
+  --data-1: oklch(0.62 0.17 25); /* red      */
+  --data-2: oklch(0.65 0.16 55); /* orange   */
+  --data-3: oklch(0.7 0.14 90); /* amber    */
+  --data-4: oklch(0.68 0.15 125); /* lime     */
+  --data-5: oklch(0.62 0.14 155); /* green    */
+  --data-6: oklch(0.64 0.11 185); /* teal     */
+  --data-7: oklch(0.64 0.12 215); /* cyan     */
+  --data-8: oklch(0.6 0.15 250); /* blue     */
+  --data-9: oklch(0.58 0.17 275); /* indigo   */
+  --data-10: oklch(0.6 0.18 300); /* violet   */
+  --data-11: oklch(0.62 0.17 330); /* magenta  */
+  --data-12: oklch(0.55 0.03 270); /* slate    */
+}
+
+[data-scheme='dark'] {
+  --data-l: 0.75;
+  --data-c: 0.13;
+
+  --data-1: oklch(0.73 0.15 25);
+  --data-2: oklch(0.76 0.14 55);
+  --data-3: oklch(0.82 0.13 90);
+  --data-4: oklch(0.79 0.14 125);
+  --data-5: oklch(0.75 0.13 155);
+  --data-6: oklch(0.76 0.1 185);
+  --data-7: oklch(0.76 0.11 215);
+  --data-8: oklch(0.72 0.13 250);
+  --data-9: oklch(0.71 0.15 275);
+  --data-10: oklch(0.73 0.16 300);
+  --data-11: oklch(0.74 0.15 330);
+  --data-12: oklch(0.7 0.03 270);
+}
+
+/**
+ * High contrast collapses the palette toward the foreground.
+ *
+ * Twelve distinguishable hues cannot all clear a 7:1 contrast ratio, and a
+ * user who picked this theme needs legibility more than they need category 7
+ * to be visibly different from category 8 — the icon shape already carries
+ * that distinction. Hue is kept as a secondary cue, at whatever strength
+ * remains after contrast is satisfied.
+ */
+[data-theme='contrast'] {
+  --data-l: 0.35;
+  --data-c: 0.11;
+
+  --data-1: oklch(0.35 0.12 25);
+  --data-2: oklch(0.35 0.1 55);
+  --data-3: oklch(0.35 0.09 90);
+  --data-4: oklch(0.35 0.1 125);
+  --data-5: oklch(0.35 0.1 155);
+  --data-6: oklch(0.35 0.08 185);
+  --data-7: oklch(0.35 0.09 215);
+  --data-8: oklch(0.35 0.12 250);
+  --data-9: oklch(0.35 0.13 275);
+  --data-10: oklch(0.35 0.13 300);
+  --data-11: oklch(0.35 0.12 330);
+  --data-12: oklch(0.3 0.02 270);
+}
+
+[data-theme='contrast'][data-scheme='dark'],
+[data-theme='contrast'] [data-scheme='dark'] {
+  --data-l: 0.86;
+  --data-c: 0.12;
+
+  --data-1: oklch(0.85 0.14 25);
+  --data-2: oklch(0.86 0.13 55);
+  --data-3: oklch(0.9 0.13 90);
+  --data-4: oklch(0.88 0.14 125);
+  --data-5: oklch(0.87 0.13 155);
+  --data-6: oklch(0.87 0.1 185);
+  --data-7: oklch(0.87 0.1 215);
+  --data-8: oklch(0.84 0.12 250);
+  --data-9: oklch(0.83 0.13 275);
+  --data-10: oklch(0.85 0.14 300);
+  --data-11: oklch(0.86 0.13 330);
+  --data-12: oklch(0.85 0.02 270);
+}
+
+:root {
+  --color-data-1: var(--data-1);
+  --color-data-2: var(--data-2);
+  --color-data-3: var(--data-3);
+  --color-data-4: var(--data-4);
+  --color-data-5: var(--data-5);
+  --color-data-6: var(--data-6);
+  --color-data-7: var(--data-7);
+  --color-data-8: var(--data-8);
+  --color-data-9: var(--data-9);
+  --color-data-10: var(--data-10);
+  --color-data-11: var(--data-11);
+  --color-data-12: var(--data-12);
+}
+
+/* ═══ elevation.css ═══════════════════════════════════════════════════════ */
+
+/**
+ * Elevation.
+ *
+ * Replaces the old Material-v2 ladder (0,1,2,3,4,6,8,12,16,24 — ten steps, of
+ * which the app only ever used six, inconsistently). This is the Material 3 /
+ * Fluent convention: six levels, 0–5, each with a defined meaning. Picking a
+ * level is now a statement about what the surface *is*, not how dark you want
+ * the shadow.
+ *
+ *   0  flush          flat against its parent, no lift
+ *   1  raised         cards, list rows, form panels resting on the page
+ *   2  sticky         docked panels, toolbars, headers that scroll over content
+ *   3  floating       FABs, inline menus, drag previews
+ *   4  overlay        drawers and side sheets over a scrim
+ *   5  modal          dialogs and mobile full-screen drawers — the top of the stack
+ *
+ * Shadows are built from a themed colour (`--shadow-color`) rather than a
+ * hardcoded black. Dark themes need a near-black *and* a lighter rim to read
+ * as elevated, since a black shadow on a dark surface is invisible.
+ */
+
+:root {
+  --shadow-elevation-0: none;
+  --shadow-elevation-1:
+    0 1px 2px -1px oklch(from var(--shadow-color) l c h / var(--shadow-strength)),
+    0 1px 3px 0 oklch(from var(--shadow-color) l c h / calc(var(--shadow-strength) * 0.7));
+  --shadow-elevation-2:
+    0 2px 4px -2px oklch(from var(--shadow-color) l c h / var(--shadow-strength)),
+    0 4px 6px -1px oklch(from var(--shadow-color) l c h / calc(var(--shadow-strength) * 0.7));
+  --shadow-elevation-3:
+    0 4px 6px -4px oklch(from var(--shadow-color) l c h / var(--shadow-strength)),
+    0 10px 15px -3px oklch(from var(--shadow-color) l c h / calc(var(--shadow-strength) * 0.7));
+  --shadow-elevation-4:
+    0 8px 10px -6px oklch(from var(--shadow-color) l c h / var(--shadow-strength)),
+    0 20px 25px -5px oklch(from var(--shadow-color) l c h / calc(var(--shadow-strength) * 0.7));
+  --shadow-elevation-5:
+    0 16px 20px -8px oklch(from var(--shadow-color) l c h / calc(var(--shadow-strength) * 1.1)),
+    0 32px 48px -12px oklch(from var(--shadow-color) l c h / calc(var(--shadow-strength) * 0.9));
+}
+
+/* ═══ motion.css ══════════════════════════════════════════════════════════ */
+
+/**
+ * Motion.
+ *
+ * Durations are expressed by *intent*, not by number, so a theme can make the
+ * whole UI feel faster or calmer with one multiplier instead of auditing every
+ * transition. `--motion-scale` is that multiplier: themes and the density
+ * setting adjust it, and `prefers-reduced-motion` drives it to zero.
+ *
+ * Reduced motion is handled here once, globally, rather than being each
+ * component's problem — a component that opts into a duration token is
+ * automatically compliant.
+ */
+
+:root {
+  /* ── Durations ───────────────────────────────────────────────────────── */
+  --duration-instant: calc(70ms * var(--motion-scale));
+  --duration-fast: calc(120ms * var(--motion-scale));
+  --duration-normal: calc(200ms * var(--motion-scale));
+  --duration-slow: calc(320ms * var(--motion-scale));
+  --duration-deliberate: calc(480ms * var(--motion-scale));
+
+  /* ── Easings ─────────────────────────────────────────────────────────── */
+  /* standard   — the default for anything that starts and ends on screen
+     decelerate — elements entering the viewport (fast in, gentle landing)
+     accelerate — elements leaving (gentle start, fast exit)
+     emphasized — Material 3's signature curve for large, attention-drawing moves
+     spring     — slight overshoot; for direct-manipulation affordances only */
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+  --ease-decelerate: cubic-bezier(0, 0, 0, 1);
+  --ease-accelerate: cubic-bezier(0.3, 0, 1, 1);
+  --ease-emphasized: cubic-bezier(0.2, 0, 0, 1);
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+
+  /* ── Keyframe animations ─────────────────────────────────────────────── */
+  --animate-fade-in: fade-in var(--duration-normal) var(--ease-decelerate);
+  --animate-fade-out: fade-out var(--duration-fast) var(--ease-accelerate);
+  --animate-card-in: card-in var(--duration-slow) var(--ease-decelerate);
+  --animate-slide-in-up: slide-in-up var(--duration-slow) var(--ease-decelerate);
+  --animate-slide-in-down: slide-in-down var(--duration-slow) var(--ease-decelerate);
+  --animate-scale-in: scale-in var(--duration-normal) var(--ease-decelerate);
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes fade-out {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes card-in {
+  from {
+    opacity: 0;
+    transform: translateY(1rem) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes slide-in-up {
+  from {
+    opacity: 0;
+    transform: translateY(100%);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes slide-in-down {
+  from {
+    opacity: 0;
+    transform: translateY(-100%);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes scale-in {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/**
+ * Reduced motion.
+ *
+ * Zeroing --motion-scale collapses every duration token, which covers all
+ * token-driven transitions. The explicit overrides below catch the rest:
+ * third-party animations (Radix, CodeMirror, Leaflet) and anything using a
+ * literal duration. Animations are not removed outright — `animation: none`
+ * would break components that rely on `animationend` to unmount — they are
+ * reduced to a single instantaneous frame.
+ *
+ * `.motion-safe-always` is the documented escape hatch for genuinely essential
+ * motion, e.g. a spinner that is the only signal that work is in progress.
+ */
+@media (prefers-reduced-motion: reduce) {
+  :root,
+  [data-scheme],
+  [data-theme] {
+    --motion-scale: 0;
+  }
+
+  *:not(.motion-safe-always),
+  *:not(.motion-safe-always)::before,
+  *:not(.motion-safe-always)::after {
+    animation-duration: 1ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 1ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* ═══ layers.css ══════════════════════════════════════════════════════════ */
+
+/**
+ * Stacking layers.
+ *
+ * Replaces 39 hand-picked `z-[NN]` literals whose ordering lived only in
+ * scattered comments. Each layer now has a name that states its role, so
+ * "does this sit above the toolbox?" is answered by reading the class, not by
+ * comparing integers across six files.
+ *
+ * The numeric values are deliberately unchanged from what they replace. The
+ * shell embeds third parties with their own stacking (Leaflet panes reach
+ * 700+, Radix portals default to 50), and several sibling layers rely on DOM
+ * order as the tiebreak. Renumbering to a tidy 10-step scale would have been
+ * cosmetic and would risk silent regressions in overlap cases that are hard to
+ * exercise in review. The names are the deliverable; the integers are history.
+ *
+ * Ordering, bottom to top:
+ *   raised/sticky      in-component layering inside a scroll container
+ *   nav                persistent chrome — mobile rail toggle, quick-add FAB
+ *   drawer             M1/M2 menu panel over its scrim
+ *   rail               mobile M0 rail card, pinned canvas tiles
+ *   side               document side card drawer over its scrim
+ *   dialog             Radix portals — dialogs, tooltips, popovers, selects
+ *   card               B5 quick-capture card internals
+ *   panel              toolbox / add panel mobile drawer over its scrim
+ *   picker             docked document pickers, which open from a panel
+ *   menu               context menus, which can be raised from a picker
+ *   fullscreen         immersive document viewer
+ *   toast              always on top; must survive every other layer
+ */
+
+:root {
+  --z-layer-raised: 10;
+  --z-layer-sticky: 20;
+  --z-layer-nav-scrim: 38;
+  --z-layer-nav: 39;
+  --z-layer-drawer: 40;
+  --z-layer-rail: 46;
+  --z-layer-side-scrim: 47;
+  --z-layer-side: 48;
+  --z-layer-dialog: 50;
+  --z-layer-card: 52;
+  --z-layer-card-overlay: 53;
+  --z-layer-panel-scrim: 54;
+  --z-layer-panel: 55;
+  --z-layer-picker-scrim: 59;
+  --z-layer-picker: 60;
+  --z-layer-menu-scrim: 70;
+  --z-layer-menu: 75;
+  --z-layer-fullscreen: 80;
+  --z-layer-toast: 100;
+}
+
+/* Explicit utilities rather than a functional `z-*` rule: overriding core's
+   `z-*` namespace would shadow `z-10`/`z-50`, which third-party components
+   (Radix, Leaflet) still emit. */
+
+/* ═══ utilities.css ═══════════════════════════════════════════════════════ */
+
+/**
+ * Semantic utilities.
+ *
+ * A small, deliberate set. Each one exists because the pattern appeared in
+ * several places and its *meaning* was being re-derived from a pile of
+ * primitives every time. Anything expressible as one or two stock Tailwind
+ * classes does not belong here.
+ *
+ * Naming note: these were `canvas-*`. "Canvas" is the product name, the HTML
+ * element, and the grid view, so `canvas-card` was ambiguous three ways.
+ * `surface-*` says what they are.
+ */
+
+/* ── Surfaces ──────────────────────────────────────────────────────────── */
+
+/* The desk: the neutral backdrop that sheets rest on. */
+
+
+/* A sheet of paper: the main content area and full-height panels. */
+
+
+/* A docked or floating panel — drawers, side panels, the toolbox. */
+
+
+/* Same panel, promoted over a scrim (mobile drawers). */
+
+
+/* An interactive card that lifts on hover. */
+
+
+
+
+/* The veil behind an overlay. Themed, so a dark theme can dim harder. */
+
+
+/* ── Accessibility ─────────────────────────────────────────────────────── */
+
+/**
+ * Guarantees a control meets the minimum hit area on touch input.
+ *
+ * Scoped to `pointer: coarse` deliberately. The app is full of deliberately
+ * compact icon buttons (28px toolbar controls in the file manager, tree row
+ * affordances) that are correct for a mouse and unusable with a thumb — this
+ * grows them only where that matters, so desktop layout is untouched.
+ *
+ * Implemented as a min-size on the element rather than an oversized
+ * pseudo-element: the pseudo-element version needs `position: relative`, which
+ * silently fights any control that is itself `absolute` or `fixed` — and a
+ * good number of the controls that need this are absolutely positioned.
+ */
+
+
+/* The one true focus treatment. `:focus-visible` only, so pointer users never
+   see it but keyboard users always do. */
+
+
+/* ── Safe areas (PWA, notched phones, Tauri transparent titlebars) ─────── */
+
+
+
+
+
+
+
+/* ── Tauri ─────────────────────────────────────────────────────────────── */
+
+/* Marks a region as the window drag handle for a custom titlebar. Inert in a
+   browser; Tauri reads the data attribute these compile to. */
+
+/* ═══ fallback.css ════════════════════════════════════════════════════════ */
+
+/**
+ * GENERATED FILE — do not edit.
+ * Run `npm run build:fallbacks` after changing any theme file.
+ *
+ * sRGB mirror of every OKLCH colour token, for engines without OKLCH support
+ * (Chromium < 111, Safari < 15.4, HarmonyOS ArkWeb). See
+ * scripts/generate-color-fallbacks.mjs for why this cannot be done with the
+ * usual two-declaration fallback pattern.
+ *
+ * `@supports not (...)` is evaluated at parse time, so supporting browsers
+ * skip this block entirely and pay only the transfer cost.
+ */
+
+@supports not (color: oklch(0 0 0)) {
+  :root {
+    --p-neutral-0: #ffffff;
+    --p-neutral-50: #fafafb;
+    --p-neutral-100: #f4f4f5;
+    --p-neutral-200: #e4e4e7;
+    --p-neutral-300: #d4d4d8;
+    --p-neutral-400: #9f9fa9;
+    --p-neutral-500: #71717b;
+    --p-neutral-600: #52525b;
+    --p-neutral-700: #3f3f46;
+    --p-neutral-800: #27272d;
+    --p-neutral-900: #18181c;
+    --p-neutral-950: #09090b;
+    --p-neutral-1000: #000000;
+    --p-teal-300: #71e6db;
+    --p-teal-400: #31d1c0;
+    --p-teal-500: #00baa7;
+    --p-teal-600: #009688;
+    --p-teal-700: #00786f;
+    --p-blue-300: #8ec5ff;
+    --p-blue-400: #56a3fd;
+    --p-blue-500: #3c82f6;
+    --p-blue-600: #2663eb;
+    --p-blue-700: #2051d0;
+    --p-green-300: #7cf1a7;
+    --p-green-400: #42dc7d;
+    --p-green-500: #1ec55f;
+    --p-green-600: #18a349;
+    --p-green-700: #07813a;
+    --p-amber-300: #ffd230;
+    --p-amber-400: #feba00;
+    --p-amber-500: #fe9900;
+    --p-amber-600: #e27100;
+    --p-amber-700: #bb4d00;
+    --p-red-300: #ffa2a2;
+    --p-red-400: #ff6468;
+    --p-red-500: #fb2c38;
+    --p-red-600: #e7000f;
+    --p-red-700: #c1000c;
+    --p-violet-400: #a784ff;
+    --p-violet-500: #8c52ff;
+    --p-violet-600: #7f22fe;
+  }
+
+  :root {
+    --background: #ffffff;
+    --foreground: #000000;
+    --card: #ffffff;
+    --card-foreground: #000000;
+    --popover: #ffffff;
+    --popover-foreground: #000000;
+    --desk: #e4e4e7;
+    --primary: #000000;
+    --primary-foreground: #ffffff;
+    --secondary: #00baa7;
+    --secondary-foreground: #000000;
+    --muted: #f4f4f5;
+    --muted-foreground: #52525b;
+    --accent: #f4f4f5;
+    --accent-foreground: #000000;
+    --destructive: #e7000f;
+    --destructive-foreground: #ffffff;
+    --destructive-subtle: #ffebe8;
+    --success: #18a349;
+    --success-foreground: #ffffff;
+    --success-subtle: #e4f8e7;
+    --warning: #e27100;
+    --warning-foreground: #000000;
+    --warning-subtle: #ffeed6;
+    --info: #2663eb;
+    --info-foreground: #ffffff;
+    --info-subtle: #e6f3ff;
+    --border: #e4e4e7;
+    --input: #d4d4d8;
+    --ring: #000000;
+    --scrim: rgba(0, 0, 0, 0.32);
+    --scrim-foreground: #ffffff;
+    --shadow-color: #000000;
+  }
+
+  :root:not([data-scheme]) {
+    --background: #09090b;
+    --foreground: #fafafb;
+    --card: #18181c;
+    --card-foreground: #fafafb;
+    --popover: #18181c;
+    --popover-foreground: #fafafb;
+    --desk: #000000;
+    --primary: #fafafb;
+    --primary-foreground: #09090b;
+    --secondary: #31d1c0;
+    --secondary-foreground: #09090b;
+    --muted: #27272d;
+    --muted-foreground: #9f9fa9;
+    --accent: #27272d;
+    --accent-foreground: #fafafb;
+    --destructive: #ff6468;
+    --destructive-foreground: #09090b;
+    --destructive-subtle: #451816;
+    --success: #42dc7d;
+    --success-foreground: #09090b;
+    --success-subtle: #0f3118;
+    --warning: #feba00;
+    --warning-foreground: #09090b;
+    --warning-subtle: #3b2301;
+    --info: #56a3fd;
+    --info-foreground: #09090b;
+    --info-subtle: #13284b;
+    --border: #27272d;
+    --input: #3f3f46;
+    --ring: #9f9fa9;
+    --scrim: rgba(0, 0, 0, 0.6);
+    --scrim-foreground: #ffffff;
+    --shadow-color: #000000;
+  }
+
+  [data-theme='canvas'][data-scheme='light'], [data-theme='canvas'] [data-scheme='light'] {
+    --background: #ffffff;
+    --foreground: #000000;
+    --card: #ffffff;
+    --card-foreground: #000000;
+    --popover: #ffffff;
+    --popover-foreground: #000000;
+    --desk: #e4e4e7;
+    --primary: #000000;
+    --primary-foreground: #ffffff;
+    --secondary: #00baa7;
+    --secondary-foreground: #000000;
+    --muted: #f4f4f5;
+    --muted-foreground: #52525b;
+    --accent: #f4f4f5;
+    --accent-foreground: #000000;
+    --destructive: #e7000f;
+    --destructive-foreground: #ffffff;
+    --destructive-subtle: #ffebe8;
+    --success: #18a349;
+    --success-foreground: #ffffff;
+    --success-subtle: #e4f8e7;
+    --warning: #e27100;
+    --warning-foreground: #000000;
+    --warning-subtle: #ffeed6;
+    --info: #2663eb;
+    --info-foreground: #ffffff;
+    --info-subtle: #e6f3ff;
+    --border: #e4e4e7;
+    --input: #d4d4d8;
+    --ring: #000000;
+    --scrim: rgba(0, 0, 0, 0.32);
+    --scrim-foreground: #ffffff;
+    --shadow-color: #000000;
+  }
+
+  [data-theme='canvas'][data-scheme='dark'], [data-theme='canvas'] [data-scheme='dark'] {
+    --background: #09090b;
+    --foreground: #fafafb;
+    --card: #18181c;
+    --card-foreground: #fafafb;
+    --popover: #18181c;
+    --popover-foreground: #fafafb;
+    --desk: #000000;
+    --primary: #fafafb;
+    --primary-foreground: #09090b;
+    --secondary: #31d1c0;
+    --secondary-foreground: #09090b;
+    --muted: #27272d;
+    --muted-foreground: #9f9fa9;
+    --accent: #27272d;
+    --accent-foreground: #fafafb;
+    --destructive: #ff6468;
+    --destructive-foreground: #09090b;
+    --destructive-subtle: #451816;
+    --success: #42dc7d;
+    --success-foreground: #09090b;
+    --success-subtle: #0f3118;
+    --warning: #feba00;
+    --warning-foreground: #09090b;
+    --warning-subtle: #3b2301;
+    --info: #56a3fd;
+    --info-foreground: #09090b;
+    --info-subtle: #13284b;
+    --border: #27272d;
+    --input: #3f3f46;
+    --ring: #9f9fa9;
+    --scrim: rgba(0, 0, 0, 0.6);
+    --scrim-foreground: #ffffff;
+    --shadow-color: #000000;
+  }
+
+  [data-theme='nord'][data-scheme='light'], [data-theme='nord'] [data-scheme='light'] {
+    --background: #f4f7fb;
+    --foreground: #29303d;
+    --card: #ffffff;
+    --card-foreground: #29303d;
+    --popover: #ffffff;
+    --popover-foreground: #29303d;
+    --desk: #e2e8ef;
+    --primary: #60819c;
+    --primary-foreground: #f8fafc;
+    --secondary: #6ca5b1;
+    --secondary-foreground: #171d28;
+    --muted: #e2e8ef;
+    --muted-foreground: #576271;
+    --accent: #d8e1eb;
+    --accent-foreground: #29303d;
+    --destructive: #ae575b;
+    --destructive-foreground: #f8fafc;
+    --destructive-subtle: #ffe6e5;
+    --success: #7dab7a;
+    --success-foreground: #171d28;
+    --success-subtle: #e4f4e3;
+    --warning: #deb175;
+    --warning-foreground: #171d28;
+    --warning-subtle: #feeeda;
+    --info: #5f93b1;
+    --info-foreground: #f8fafc;
+    --info-subtle: #dff0fb;
+    --border: #d1dae4;
+    --input: #bfc8d4;
+    --ring: #60819c;
+    --scrim: rgba(23, 29, 40, 0.35);
+    --scrim-foreground: #ffffff;
+    --shadow-color: #29303d;
+  }
+
+  [data-theme='nord'][data-scheme='dark'], [data-theme='nord'] [data-scheme='dark'] {
+    --background: #222935;
+    --foreground: #e1e7ee;
+    --card: #2c3440;
+    --card-foreground: #e1e7ee;
+    --popover: #2c3440;
+    --popover-foreground: #e1e7ee;
+    --desk: #171d28;
+    --primary: #84b9cd;
+    --primary-foreground: #171d28;
+    --secondary: #6ca5b1;
+    --secondary-foreground: #171d28;
+    --muted: #373f4b;
+    --muted-foreground: #9fa8b3;
+    --accent: #404956;
+    --accent-foreground: #e1e7ee;
+    --destructive: #c46b6d;
+    --destructive-foreground: #171d28;
+    --destructive-subtle: #573636;
+    --success: #8fbe8c;
+    --success-foreground: #171d28;
+    --success-subtle: #334632;
+    --warning: #eabd81;
+    --warning-foreground: #171d28;
+    --warning-subtle: #514028;
+    --info: #74a8c7;
+    --info-foreground: #171d28;
+    --info-subtle: #2b4452;
+    --border: #38414d;
+    --input: #4f5967;
+    --ring: #84b9cd;
+    --scrim: rgba(13, 18, 27, 0.6);
+    --scrim-foreground: #ffffff;
+    --shadow-color: #060a12;
+  }
+
+  [data-theme='contrast'][data-scheme='light'], [data-theme='contrast'] [data-scheme='light'] {
+    --background: #ffffff;
+    --foreground: #000000;
+    --card: #ffffff;
+    --card-foreground: #000000;
+    --popover: #ffffff;
+    --popover-foreground: #000000;
+    --desk: #d7d7d7;
+    --primary: #000000;
+    --primary-foreground: #ffffff;
+    --secondary: #003368;
+    --secondary-foreground: #ffffff;
+    --muted: #ebebeb;
+    --muted-foreground: #3d3d3d;
+    --accent: #dedede;
+    --accent-foreground: #000000;
+    --destructive: #9e0000;
+    --destructive-foreground: #ffffff;
+    --destructive-subtle: #ffe4e0;
+    --success: #005820;
+    --success-foreground: #ffffff;
+    --success-subtle: #def1e1;
+    --warning: #784500;
+    --warning-foreground: #ffffff;
+    --warning-subtle: #fde7cf;
+    --info: #00419b;
+    --info-foreground: #ffffff;
+    --info-subtle: #dfecff;
+    --border: #1b1b1b;
+    --input: #1b1b1b;
+    --ring: #002881;
+    --scrim: rgba(0, 0, 0, 0.7);
+    --scrim-foreground: #ffffff;
+    --shadow-color: #000000;
+  }
+
+  [data-theme='contrast'][data-scheme='dark'], [data-theme='contrast'] [data-scheme='dark'] {
+    --background: #000000;
+    --foreground: #ffffff;
+    --card: #020202;
+    --card-foreground: #ffffff;
+    --popover: #020202;
+    --popover-foreground: #ffffff;
+    --desk: #090909;
+    --primary: #ffffff;
+    --primary-foreground: #000000;
+    --secondary: #34dde5;
+    --secondary-foreground: #000000;
+    --muted: #121212;
+    --muted-foreground: #c4c4c4;
+    --accent: #1f1f1f;
+    --accent-foreground: #ffffff;
+    --destructive: #ff8179;
+    --destructive-foreground: #000000;
+    --destructive-subtle: #3a0e0d;
+    --success: #5df07e;
+    --success-foreground: #000000;
+    --success-subtle: #06270d;
+    --warning: #ffd12e;
+    --warning-foreground: #000000;
+    --warning-subtle: #2f2200;
+    --info: #64d1ff;
+    --info-foreground: #000000;
+    --info-subtle: #00233b;
+    --border: #cecece;
+    --input: #cecece;
+    --ring: #f7e04f;
+    --scrim: rgba(0, 0, 0, 0.8);
+    --scrim-foreground: #ffffff;
+    --shadow-color: #000000;
+  }
+
+  [data-theme='terminal'][data-scheme='light'], [data-theme='terminal'] [data-scheme='light'] {
+    --background: #fdfdfc;
+    --foreground: #1b1b17;
+    --card: #ffffff;
+    --card-foreground: #1b1b17;
+    --popover: #ffffff;
+    --popover-foreground: #1b1b17;
+    --desk: #e8e8e5;
+    --primary: #00602a;
+    --primary-foreground: #fdfdfc;
+    --secondary: #006d97;
+    --secondary-foreground: #fdfdfc;
+    --muted: #f0f0ee;
+    --muted-foreground: #5e5e59;
+    --accent: #e2eae4;
+    --accent-foreground: #1b1b17;
+    --destructive: #c2181d;
+    --destructive-foreground: #fdfdfc;
+    --destructive-subtle: #ffe6e2;
+    --success: #007834;
+    --success-foreground: #fdfdfc;
+    --success-subtle: #dff6e2;
+    --warning: #b36300;
+    --warning-foreground: #fdfdfc;
+    --warning-subtle: #ffe9d4;
+    --info: #0065b4;
+    --info-foreground: #fdfdfc;
+    --info-subtle: #dff1ff;
+    --border: #d4d4d1;
+    --input: #bebeba;
+    --ring: #00602a;
+    --scrim: rgba(27, 27, 23, 0.4);
+    --scrim-foreground: #ffffff;
+    --shadow-color: #1b1b17;
+  }
+
+  [data-theme='terminal'][data-scheme='dark'], [data-theme='terminal'] [data-scheme='dark'] {
+    --background: #0e100e;
+    --foreground: #d2dfd4;
+    --card: #161916;
+    --card-foreground: #d2dfd4;
+    --popover: #161916;
+    --popover-foreground: #d2dfd4;
+    --desk: #050605;
+    --primary: #53de73;
+    --primary-foreground: #060a07;
+    --secondary: #3dbfe2;
+    --secondary-foreground: #060a07;
+    --muted: #212522;
+    --muted-foreground: #8a968c;
+    --accent: #242e26;
+    --accent-foreground: #d2dfd4;
+    --destructive: #ff645f;
+    --destructive-foreground: #060a07;
+    --destructive-subtle: #451816;
+    --success: #53de73;
+    --success-foreground: #060a07;
+    --success-subtle: #113117;
+    --warning: #f3ba25;
+    --warning-foreground: #060a07;
+    --warning-subtle: #362600;
+    --info: #56baef;
+    --info-foreground: #060a07;
+    --info-subtle: #002d42;
+    --border: #2a302b;
+    --input: #424a44;
+    --ring: #53de73;
+    --scrim: rgba(1, 2, 1, 0.7);
+    --scrim-foreground: #ffffff;
+    --shadow-color: #000000;
+  }
+
+  :root {
+    --data-1: #da534f;
+    --data-2: #d76f04;
+    --data-3: #c09910;
+    --data-4: #83a730;
+    --data-5: #269e5f;
+    --data-6: #12a195;
+    --data-7: #009eb9;
+    --data-8: #2784d5;
+    --data-9: #606cdd;
+    --data-10: #9260da;
+    --data-11: #bd5ab6;
+    --data-12: #6b7184;
+  }
+
+  [data-scheme='dark'] {
+    --data-1: #f87e77;
+    --data-2: #f49752;
+    --data-3: #e5c057;
+    --data-4: #a6ca60;
+    --data-5: #62c689;
+    --data-6: #5cc6b9;
+    --data-7: #4dc3dd;
+    --data-8: #60aaf3;
+    --data-9: #8798fe;
+    --data-10: #b88efc;
+    --data-11: #df86d7;
+    --data-12: #979eb2;
+  }
+
+  [data-theme='contrast'] {
+    --data-1: #6c1517;
+    --data-2: #602800;
+    --data-3: #4d3700;
+    --data-4: #2f4300;
+    --data-5: #004922;
+    --data-6: #004740;
+    --data-7: #004557;
+    --data-8: #003b75;
+    --data-9: #2a2e7c;
+    --data-10: #462373;
+    --data-11: #5b1c57;
+    --data-12: #2a2d38;
+  }
+
+  [data-theme='contrast'][data-scheme='dark'], [data-theme='contrast'] [data-scheme='dark'] {
+    --data-1: #ffa89f;
+    --data-2: #ffb97b;
+    --data-3: #ffda72;
+    --data-4: #c2e87d;
+    --data-5: #89eeaf;
+    --data-6: #81eadd;
+    --data-7: #80e5fd;
+    --data-8: #8cd0ff;
+    --data-9: #afc0ff;
+    --data-10: #dcb8ff;
+    --data-11: #ffb1fa;
+    --data-12: #c8cddb;
+  }
+
+  /* Elevation is rebuilt from a plain rgba shadow: the OKLCH ladder is
+     composed with relative colour syntax, which is even less supported than
+     oklch() itself. Values approximate the same visual weight. */
+  :root {
+    --shadow-elevation-0: none;
+    --shadow-elevation-1: 0 1px 2px -1px rgba(0, 0, 0, 0.12), 0 1px 3px 0 rgba(0, 0, 0, 0.08);
+    --shadow-elevation-2: 0 2px 4px -2px rgba(0, 0, 0, 0.12), 0 4px 6px -1px rgba(0, 0, 0, 0.08);
+    --shadow-elevation-3: 0 4px 6px -4px rgba(0, 0, 0, 0.12), 0 10px 15px -3px rgba(0, 0, 0, 0.08);
+    --shadow-elevation-4: 0 8px 10px -6px rgba(0, 0, 0, 0.12), 0 20px 25px -5px rgba(0, 0, 0, 0.08);
+    --shadow-elevation-5: 0 16px 20px -8px rgba(0, 0, 0, 0.16), 0 32px 48px -12px rgba(0, 0, 0, 0.12);
+  }
+
+  [data-scheme='dark'] {
+    --shadow-elevation-1: 0 1px 2px -1px rgba(0, 0, 0, 0.5), 0 1px 3px 0 rgba(0, 0, 0, 0.35);
+    --shadow-elevation-2: 0 2px 4px -2px rgba(0, 0, 0, 0.5), 0 4px 6px -1px rgba(0, 0, 0, 0.35);
+    --shadow-elevation-3: 0 4px 6px -4px rgba(0, 0, 0, 0.5), 0 10px 15px -3px rgba(0, 0, 0, 0.35);
+    --shadow-elevation-4: 0 8px 10px -6px rgba(0, 0, 0, 0.5), 0 20px 25px -5px rgba(0, 0, 0, 0.35);
+    --shadow-elevation-5: 0 16px 20px -8px rgba(0, 0, 0, 0.55), 0 32px 48px -12px rgba(0, 0, 0, 0.45);
+  }
+}
