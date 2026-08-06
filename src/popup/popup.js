@@ -129,7 +129,11 @@ const fuseConfig = {
 
 // Initialize popup
 document.addEventListener('DOMContentLoaded', async () => {
-  document.body.dataset.host = isPopupView() ? 'popup' : 'panel';
+  // NB: the host is not tagged here. ../theme/theme-init.js writes it to
+  // <html> before first paint, because it decides the layout — doing it at
+  // DOMContentLoaded meant the side panel rendered one frame at the popup's
+  // fixed 452px. isPopupView() below still reads the same `?host` signal for
+  // the behavioural cases, e.g. hiding the dock button.
   initializeElements();
   setupEventListeners();
   await loadInitialData();

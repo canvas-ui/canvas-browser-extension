@@ -6,8 +6,8 @@
  * so nothing @imports at runtime.
  *
  * The same page serves the toolbar popup and the side panel / sidebar; which
- * one it is arrives as `?host=panel` and lands on `body[data-host]`. See
- * ./base.css for the sizing, and isPopupView() in popup.js for the detection.
+ * one it is arrives as `?host=panel` and is stamped onto `html[data-host]`
+ * before first paint by ../theme/theme-init.js. See ./base.css for the sizing.
  *
  * Order between these files is not load-bearing — custom properties resolve at
  * computed-value time, so a rule may read a token declared below it. Order

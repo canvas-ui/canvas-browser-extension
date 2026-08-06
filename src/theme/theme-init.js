@@ -21,3 +21,19 @@
 import { applyTheme, readStoredPreferences } from './apply-theme.js';
 
 applyTheme(readStoredPreferences());
+
+/*
+ * Host detection, also before first paint.
+ *
+ * The popup is fixed-size and the side panel is fluid, so this decides the
+ * layout — and it has to be on <html>, not <body>. Chrome sizes an extension
+ * popup from the root box; with no width there, it has no definite number to
+ * size down to. It also has to happen here rather than in popup.js, which runs
+ * at DOMContentLoaded — one paint too late, so the side panel would lay out at
+ * the popup's fixed 452px first and then snap to fluid.
+ *
+ * `?host=panel` is set by side_panel/sidebar_action in the manifests and by
+ * sidePanel.setOptions in handleDockClick(). Everything else is the popup.
+ */
+document.documentElement.dataset.host =
+  new URLSearchParams(window.location.search).get('host') === 'panel' ? 'panel' : 'popup';
