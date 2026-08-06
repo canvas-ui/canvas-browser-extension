@@ -1,6 +1,6 @@
 {
   "name": "canvas-browser-extension",
-  "version": "3.0.0",
+  "version": "3.0.1",
   "description": "Canvas Browser Extension for seamless tab synchronization",
   "type": "module",
   "scripts": {
@@ -19,7 +19,7 @@
     "synchronization",
     "canvas"
   ],
-  "author": "me@idnc.sk",
+  "author": "Jozef Melich <me@idnc.sk>",
   "license": "AGPL-3.0-or-later",
   "devDependencies": {
     "archiver": "^7.0.1",
