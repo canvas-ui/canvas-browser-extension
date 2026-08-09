@@ -1,7 +1,20 @@
 // API Client module for Canvas Extension
-// Handles REST API communication with Canvas server
+// REST transport comes from the shared workspace client (@augmentd-labs/
+// canvas-api-client) in envelope mode (unwrap:false): success envelopes are
+// returned whole because sync-engine/service-worker call sites still read
+// `.status` / `.payload` themselves. This module keeps the extension-specific
+// policy: Firefox local-network fetch modes, the 10s budget, AuthExpiredError
+// mapping, the started-workspace preflight cache, and the endpoint surface
+// the background scripts actually consume.
+
+import { CanvasApiClient as CanvasHttpClient, CanvasError, isNetworkError } from '@augmentd-labs/canvas-api-client';
+import { routes, decodeJwtPayload, getJwtExpiryMs } from '@augmentd-labs/canvas-protocol';
 
 import { browserStorage } from './browser-storage.js';
+
+// Token helpers live in @augmentd-labs/canvas-protocol now; re-exported so
+// service-worker.js keeps importing them from here.
+export { decodeJwtPayload, getJwtExpiryMs };
 
 export class AuthExpiredError extends Error {
   constructor(status) {
@@ -12,6 +25,7 @@ export class AuthExpiredError extends Error {
 }
 
 const DEFAULT_WORKSPACE_TREE_NAME = 'context';
+const REQUEST_TIMEOUT_MS = 10000;
 
 // Our tree ref is the tree *type* ('context' | 'directory'). Sending treeType
 // explicitly lets the server pick the right selector without name-detection
@@ -22,33 +36,37 @@ function treeTypeFromRef(ref) {
   return WORKSPACE_TREE_TYPES.has(ref) ? ref : undefined;
 }
 
-/**
- * Decode a JWT payload without verifying the signature.
- * Returns the parsed payload object, or null if the value is not a JWT
- * (e.g. opaque `canvas-` API/device tokens, which never expire).
- */
-export function decodeJwtPayload(token) {
-  if (typeof token !== 'string') return null;
-  const parts = token.split('.');
-  if (parts.length !== 3) return null;
-  try {
-    const base64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
-    const padded = base64.padEnd(base64.length + ((4 - (base64.length % 4)) % 4), '=');
-    const json = atob(padded);
-    return JSON.parse(json);
-  } catch {
-    return null;
-  }
-}
+const isFirefoxRuntime = () => typeof browser !== 'undefined' && !!browser.runtime;
+const isLocalNetworkUrl = (url) =>
+  !!url && (url.includes('127.0.0.1') || url.includes('172.16.') || url.includes('192.168.') || url.includes('10.'));
 
 /**
- * Return the expiry of a JWT as a millisecond epoch timestamp,
- * or null if the token is not a JWT or carries no `exp` claim.
+ * Fetch wrapper injected into the shared client. Applies the historical
+ * Firefox/local-network mode handling and logs request timing (console.* is
+ * dropped from production bundles by esbuild).
  */
-export function getJwtExpiryMs(token) {
-  const payload = decodeJwtPayload(token);
-  if (!payload || typeof payload.exp !== 'number') return null;
-  return payload.exp * 1000;
+function extensionFetch(url, init = {}) {
+  const target = String(url);
+  const isFirefox = isFirefoxRuntime();
+  const isLocalNetwork = isLocalNetworkUrl(target);
+
+  const options = { ...init };
+  if (isFirefox && isLocalNetwork) {
+    // Firefox: no CORS mode, no credentials for local network
+    options.mode = 'no-cors';
+    options.credentials = 'omit';
+  } else if (!isLocalNetwork) {
+    // Remote servers: use CORS mode
+    options.mode = 'cors';
+  }
+  // Local network in Chrome: no mode specified (default behavior)
+
+  const startedAt = performance.now();
+  console.log(`API Request: ${options.method || 'GET'} ${target}`, { mode: options.mode, isFirefox, isLocalNetwork });
+  return fetch(target, options).then((response) => {
+    console.info(`API Timing: ${options.method || 'GET'} ${target} ${Math.round(performance.now() - startedAt)}ms`);
+    return response;
+  });
 }
 
 export class CanvasApiClient {
@@ -59,7 +77,7 @@ export class CanvasApiClient {
     this.connected = false;
     this.appKey = 'canvas-extension';
     this.startedWorkspaces = new Set();
-    this.requestStats = { count: 0, totalMs: 0, last: null };
+    this._http = null;
   }
 
   // ---- Utilities ---------------------------------------------------------
@@ -91,33 +109,11 @@ export class CanvasApiClient {
     return ids;
   }
 
-  getWorkspaceTreeRoute(workspaceNameOrId, treeNameOrTreeId = DEFAULT_WORKSPACE_TREE_NAME) {
-    const tree = treeNameOrTreeId || DEFAULT_WORKSPACE_TREE_NAME;
-    return `/workspaces/${encodeURIComponent(workspaceNameOrId)}/trees/${encodeURIComponent(tree)}`;
-  }
-
-  async fetchDeleteWithJson(url, body) {
-    const startedAt = performance.now();
-    const endpoint = url.replace(`${this.baseUrl}${this.apiBasePath}`, '');
-    const resp = await fetch(url, {
-      method: 'DELETE',
-      headers: await this.buildHeaders(),
-      body: JSON.stringify(body)
-    });
-    const durationMs = Math.round(performance.now() - startedAt);
-    this.recordRequestMetric('DELETE', endpoint, durationMs);
-    console.info(`API Timing: DELETE ${endpoint} ${durationMs}ms`);
-    if (!resp.ok) {
-      if (resp.status === 401 || resp.status === 403) throw new AuthExpiredError(resp.status);
-      throw new Error(`HTTP ${resp.status}: ${resp.statusText}`);
-    }
-    return await resp.json();
-  }
-
   // Initialize client with connection settings
   initialize(serverUrl, apiBasePath, apiToken) {
     const normalizedBaseUrl = serverUrl.replace(/\/$/, '');
     const connectionChanged = this.baseUrl !== normalizedBaseUrl || this.userToken !== apiToken;
+    const transportChanged = this.baseUrl !== normalizedBaseUrl || this.apiBasePath !== apiBasePath;
 
     this.baseUrl = normalizedBaseUrl; // Remove trailing slash
     this.apiBasePath = apiBasePath;
@@ -126,128 +122,53 @@ export class CanvasApiClient {
     if (connectionChanged) {
       this.startedWorkspaces.clear();
     }
+    if (transportChanged) {
+      this._http = null; // rebuilt lazily with the new base
+    }
   }
 
-  // Build full API URL
+  // Build full API URL (testConnection/login still fetch directly)
   buildUrl(endpoint) {
     return `${this.baseUrl}${this.apiBasePath}${endpoint}`;
   }
 
-  isBrowserScopedSyncEnabled(syncSettings) {
-    return !!(syncSettings?.syncOnlyCurrentBrowser || syncSettings?.syncOnlyThisBrowser);
-  }
-
-  parseResponsePayload(response) {
-    return response?.payload || response?.data || response;
-  }
-
-  recordRequestMetric(method, endpoint, durationMs) {
-    this.requestStats.count += 1;
-    this.requestStats.totalMs += durationMs;
-    this.requestStats.last = { method, endpoint, durationMs, at: new Date().toISOString() };
-  }
-
-  getRequestStats() {
-    return { ...this.requestStats };
-  }
-
-  resetRequestStats() {
-    this.requestStats = { count: 0, totalMs: 0, last: null };
-  }
-
-  async ensureWorkspaceStarted(workspaceNameOrId) {
-    const workspaceKey = encodeURIComponent(workspaceNameOrId);
-    if (this.startedWorkspaces.has(workspaceKey)) return;
-
-    await this.post(`/workspaces/${workspaceKey}/start`, {});
-    this.startedWorkspaces.add(workspaceKey);
-  }
-
-  // Build request headers
-  async buildHeaders() {
-    const headers = {
-      'Content-Type': 'application/json',
-      'Accept': 'application/json',
-      'X-App-Name': this.appKey
-    };
-
-    if (this.userToken) {
-      headers['Authorization'] = `Bearer ${this.userToken}`;
+  _client() {
+    if (!this._http) {
+      this._http = new CanvasHttpClient({
+        baseUrl: this.baseUrl,
+        apiBase: this.apiBasePath,
+        // Closure over the mutable field: service-worker assigns userToken
+        // directly (token renewal) and the next request picks it up.
+        getToken: () => this.userToken || null,
+        appName: this.appKey,
+        headers: { Accept: 'application/json' },
+        timeout: REQUEST_TIMEOUT_MS,
+        unwrap: false,
+        fetch: extensionFetch
+      });
     }
-
-    return headers;
+    return this._http;
   }
 
-  // Generic HTTP request method
-  async request(method, endpoint, data = null) {
-    const url = this.buildUrl(endpoint);
-    const headers = await this.buildHeaders();
-    const startedAt = performance.now();
-
-    // Firefox compatibility: avoid CORS issues for local network connections
-    const isFirefox = typeof browser !== 'undefined' && browser.runtime;
-    const isLocalNetwork = this.baseUrl.includes('127.0.0.1') || this.baseUrl.includes('172.16.') || this.baseUrl.includes('192.168.') || this.baseUrl.includes('10.');
-
-    const requestOptions = {
-      method,
-      headers
-    };
-
-    // Firefox-specific handling for local network connections
-    if (isFirefox && isLocalNetwork) {
-      // Firefox: no CORS mode, no credentials for local network
-      requestOptions.mode = 'no-cors';
-      requestOptions.credentials = 'omit';
-    } else if (!isLocalNetwork) {
-      // Remote servers: use CORS mode
-      requestOptions.mode = 'cors';
-    }
-    // Local network in Chrome: no mode specified (default behavior)
-
-    if (data && (method === 'POST' || method === 'PUT' || method === 'PATCH')) {
-      requestOptions.body = JSON.stringify(data);
-    }
-
+  /**
+   * Run one request through the shared client, mapping errors onto the
+   * extension's historical contract: 401/403 → AuthExpiredError, timeouts →
+   * the "server is not responding" text, Firefox local-network failures →
+   * the console troubleshooting guide.
+   */
+  async _req(method, path, options = {}) {
     try {
-      console.log(`API Request: ${method} ${url}`, { mode: requestOptions.mode, isFirefox, isLocalNetwork });
-
-      // Add timeout for Firefox to prevent hanging
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
-
-      const response = await fetch(url, { ...requestOptions, signal: controller.signal });
-      clearTimeout(timeoutId);
-
-      if (!response.ok) {
-        if (response.status === 401 || response.status === 403) throw new AuthExpiredError(response.status);
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-      }
-
-      const responseData = await response.json();
-      const durationMs = Math.round(performance.now() - startedAt);
-      this.recordRequestMetric(method, endpoint, durationMs);
-      console.info(`API Timing: ${method} ${endpoint} ${durationMs}ms`);
-      console.log(`API Response: ${method} ${url}`, responseData);
-
-      // Validate Canvas API response format
-      if (responseData.status && responseData.status !== 'success') {
-        throw new Error(`Canvas API Error: ${responseData.message || 'Unknown error'}`);
-      }
-
-      return responseData;
+      return await this._client().request(method, path, options);
     } catch (error) {
-      if (error.name === 'AbortError') {
-        console.error(`API Timeout: ${method} ${url} - request took longer than 10 seconds`);
+      const status = error instanceof CanvasError ? error.statusCode : undefined;
+      if (status === 401 || status === 403) throw new AuthExpiredError(status);
+      if (error instanceof CanvasError && error.code === 'TIMEOUT') {
+        console.error(`API Timeout: ${method} ${path} - request took longer than ${REQUEST_TIMEOUT_MS / 1000} seconds`);
         throw new Error(`Request timeout: server ${this.baseUrl} is not responding`);
       }
-
-      // Firefox-specific error handling for local network
-      if (typeof browser !== 'undefined' && browser.runtime) {
-        const isLocalNetwork = this.baseUrl.includes('127.0.0.1') || this.baseUrl.includes('172.16.') || this.baseUrl.includes('192.168.') || this.baseUrl.includes('10.');
-        if (isLocalNetwork && (error.message.includes('Failed to fetch') || error.name === 'AbortError')) {
-          console.error(`Firefox local network connection blocked: ${error.message}`);
-
-          const firefoxError = `
+      if (isFirefoxRuntime() && isLocalNetworkUrl(this.baseUrl) && (isNetworkError(error) || /failed to fetch/i.test(error.message || ''))) {
+        console.error(`Firefox local network connection blocked: ${error.message}`);
+        console.error(`
 🚫 Firefox Security Block Detected
 
 Firefox is blocking connections to your local Canvas server (${this.baseUrl}).
@@ -261,36 +182,20 @@ Quick Solutions:
 4. 🔗 Tunnel: Use ngrok to create HTTPS tunnel
 
 This is a Firefox security feature, not an extension bug.
-`;
-
-          console.error(firefoxError);
-          throw new Error('Firefox blocked local network connection - see console for solutions');
-        }
+`);
+        throw new Error('Firefox blocked local network connection - see console for solutions');
       }
-
-      console.error(`API Error: ${method} ${url}`, error);
+      console.error(`API Error: ${method} ${path}`, error);
       throw error;
     }
   }
 
-  // GET request
-  async get(endpoint) {
-    return await this.request('GET', endpoint);
-  }
+  async ensureWorkspaceStarted(workspaceNameOrId) {
+    const workspaceKey = encodeURIComponent(workspaceNameOrId);
+    if (this.startedWorkspaces.has(workspaceKey)) return;
 
-  // POST request
-  async post(endpoint, data) {
-    return await this.request('POST', endpoint, data);
-  }
-
-  // PUT request
-  async put(endpoint, data) {
-    return await this.request('PUT', endpoint, data);
-  }
-
-  // DELETE request
-  async delete(endpoint) {
-    return await this.request('DELETE', endpoint);
+    await this._req('POST', routes.workspaces.start(workspaceKey), { data: {} });
+    this.startedWorkspaces.add(workspaceKey);
   }
 
   // Test connection to server
@@ -303,8 +208,8 @@ This is a Firefox security feature, not an extension bug.
       console.log(`Testing ping: ${pingUrl}`);
 
       // Firefox compatibility: avoid CORS issues for local network connections
-      const isFirefox = typeof browser !== 'undefined' && browser.runtime;
-      const isLocalNetwork = this.baseUrl.includes('127.0.0.1') || this.baseUrl.includes('172.16.') || this.baseUrl.includes('192.168.') || this.baseUrl.includes('10.');
+      const isFirefox = isFirefoxRuntime();
+      const isLocalNetwork = isLocalNetworkUrl(this.baseUrl);
 
       console.log(`Firefox: ${isFirefox}, Local Network: ${isLocalNetwork}`);
 
@@ -539,7 +444,7 @@ Firefox blocks local network requests for security reasons.
   async testAuthentication(pingData) {
     try {
       console.log('Testing authenticated endpoint...');
-      const userResponse = await this.get('/auth/me');
+      const userResponse = await this._req('GET', routes.auth.me());
       console.log('Authentication response:', userResponse);
 
       // Validate Canvas API authentication response
@@ -567,12 +472,8 @@ Firefox blocks local network requests for security reasons.
   }
 
   // Authentication methods
-  async getCurrentUser() {
-    return await this.get('/auth/me');
-  }
-
   async login(email, password) {
-    const url = this.buildUrl('/auth/login');
+    const url = this.buildUrl(routes.auth.login());
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 10000);
     try {
@@ -602,61 +503,46 @@ Firefox blocks local network requests for security reasons.
    * Returns { token, expiresIn } on success.
    */
   async refreshUserToken() {
-    const data = await this.post('/auth/token/refresh', {});
-    const body = this.parseResponsePayload(data);
+    const data = await this._req('POST', routes.auth.tokenRefresh(), { data: {} });
+    const body = data?.payload || data;
     const token = body?.token;
     if (!token) throw new Error('Token refresh did not return a new token');
     this.userToken = token;
     return { token, expiresIn: body?.expiresIn || null, user: body?.user || null };
   }
 
-  // Expiry of the current user token (ms epoch), or null for non-JWT/non-expiring tokens.
-  getUserTokenExpiryMs() {
-    return getJwtExpiryMs(this.userToken);
-  }
-
   // Context methods
   async getContexts() {
-    return await this.get('/contexts');
-  }
-
-  async getContext(contextId) {
-    return await this.get(`/contexts/${contextId}`);
-  }
-
-
-
-  async updateContext(contextId, contextData) {
-    return await this.put(`/contexts/${contextId}`, contextData);
+    return await this._req('GET', routes.contexts.collection());
   }
 
   async updateContextUrl(contextId, url) {
-    return await this.post(`/contexts/${contextId}/url`, { url });
+    return await this._req('POST', routes.contexts.url(contextId), { data: { url } });
   }
 
   // Context tree
   async getContextTree(contextId) {
-    return await this.get(`/contexts/${contextId}/tree`);
-  }
-
-  async deleteContext(contextId) {
-    return await this.delete(`/contexts/${contextId}`);
+    return await this._req('GET', routes.contexts.tree(contextId));
   }
 
   // Workspace methods
   async getWorkspaces() {
-    return await this.get('/workspaces');
+    return await this._req('GET', routes.workspaces.collection());
   }
 
   // Workspace lifecycle
   async startWorkspace(workspaceNameOrId) {
-    return await this.post(`/workspaces/${encodeURIComponent(workspaceNameOrId)}/start`, {});
+    return await this._req('POST', routes.workspaces.start(encodeURIComponent(workspaceNameOrId)), { data: {} });
   }
 
   // Workspace tree
   async getWorkspaceTree(workspaceNameOrId, treeNameOrTreeId = DEFAULT_WORKSPACE_TREE_NAME) {
     await this.ensureWorkspaceStarted(workspaceNameOrId);
-    return await this.get(this.getWorkspaceTreeRoute(workspaceNameOrId, treeNameOrTreeId));
+    const tree = treeNameOrTreeId || DEFAULT_WORKSPACE_TREE_NAME;
+    return await this._req(
+      'GET',
+      routes.workspaces.treeByName(encodeURIComponent(workspaceNameOrId), encodeURIComponent(tree))
+    );
   }
 
   async getWorkspaceDocuments(workspaceNameOrId, contextSpec = '/', featureArray = [], options = {}) {
@@ -666,80 +552,72 @@ Firefox blocks local network requests for security reasons.
       enhancedFeatureArray.unshift('data/schema/tab');
     }
 
-    let endpoint = `/workspaces/${encodeURIComponent(workspaceNameOrId)}/documents`;
-
-    const params = new URLSearchParams();
     const listTree = options.treeNameOrTreeId || DEFAULT_WORKSPACE_TREE_NAME;
-    params.set('treeNameOrTreeId', listTree);
-    const listTreeType = treeTypeFromRef(listTree);
-    if (listTreeType) params.set('treeType', listTreeType);
-    if (contextSpec) params.set('context', contextSpec);
-    if (enhancedFeatureArray.length > 0) {
-      enhancedFeatureArray.forEach(feature => params.append('allOf', feature));
-    }
-    if (Number.isFinite(options.limit)) params.set('limit', String(options.limit));
-    if (Number.isFinite(options.offset)) params.set('offset', String(options.offset));
-    // Revalidation read: the payload comes back as document ids, not documents.
-    if (options.idsOnly) params.set('idsOnly', 'true');
-
-    const query = params.toString();
-    if (query) endpoint += `?${query}`;
-
-    return await this.get(endpoint);
+    return await this._req('GET', routes.workspaces.documents(encodeURIComponent(workspaceNameOrId)), {
+      params: {
+        treeNameOrTreeId: listTree,
+        treeType: treeTypeFromRef(listTree),
+        ...(contextSpec ? { context: contextSpec } : {}),
+        ...(enhancedFeatureArray.length > 0 ? { allOf: enhancedFeatureArray } : {}),
+        ...(Number.isFinite(options.limit) ? { limit: options.limit } : {}),
+        ...(Number.isFinite(options.offset) ? { offset: options.offset } : {}),
+        // Revalidation read: the payload comes back as document ids, not documents.
+        ...(options.idsOnly ? { idsOnly: 'true' } : {})
+      }
+    });
   }
 
-  async insertWorkspaceDocument(workspaceNameOrId, document, contextSpec = '/', featureArray = [], treeNameOrTreeId = DEFAULT_WORKSPACE_TREE_NAME) {
-    await this.ensureWorkspaceStarted(workspaceNameOrId);
-    const data = {
-      treeNameOrTreeId: treeNameOrTreeId || DEFAULT_WORKSPACE_TREE_NAME,
-      treeType: treeTypeFromRef(treeNameOrTreeId || DEFAULT_WORKSPACE_TREE_NAME),
-      context: contextSpec,
-      features: featureArray,
-      documents: [document]
-    };
-    return await this.post(`/workspaces/${encodeURIComponent(workspaceNameOrId)}/documents`, data);
-  }
-
-  async insertWorkspaceDocuments(workspaceNameOrId, documents, contextSpec = '/', featureArray = [], treeNameOrTreeId = DEFAULT_WORKSPACE_TREE_NAME) {
-    await this.ensureWorkspaceStarted(workspaceNameOrId);
-    const data = {
-      treeNameOrTreeId: treeNameOrTreeId || DEFAULT_WORKSPACE_TREE_NAME,
-      treeType: treeTypeFromRef(treeNameOrTreeId || DEFAULT_WORKSPACE_TREE_NAME),
+  _workspaceDocumentsBody(documents, contextSpec, featureArray, treeNameOrTreeId) {
+    const tree = treeNameOrTreeId || DEFAULT_WORKSPACE_TREE_NAME;
+    return {
+      treeNameOrTreeId: tree,
+      treeType: treeTypeFromRef(tree),
       context: contextSpec,
       features: featureArray,
       documents
     };
-    return await this.post(`/workspaces/${encodeURIComponent(workspaceNameOrId)}/documents`, data);
+  }
+
+  async insertWorkspaceDocument(workspaceNameOrId, document, contextSpec = '/', featureArray = [], treeNameOrTreeId = DEFAULT_WORKSPACE_TREE_NAME) {
+    await this.ensureWorkspaceStarted(workspaceNameOrId);
+    return await this._req('POST', routes.workspaces.documents(encodeURIComponent(workspaceNameOrId)), {
+      data: this._workspaceDocumentsBody([document], contextSpec, featureArray, treeNameOrTreeId)
+    });
+  }
+
+  async insertWorkspaceDocuments(workspaceNameOrId, documents, contextSpec = '/', featureArray = [], treeNameOrTreeId = DEFAULT_WORKSPACE_TREE_NAME) {
+    await this.ensureWorkspaceStarted(workspaceNameOrId);
+    return await this._req('POST', routes.workspaces.documents(encodeURIComponent(workspaceNameOrId)), {
+      data: this._workspaceDocumentsBody(documents, contextSpec, featureArray, treeNameOrTreeId)
+    });
+  }
+
+  _workspaceDocumentsParams(contextSpec, featureArray, treeNameOrTreeId) {
+    const tree = treeNameOrTreeId || DEFAULT_WORKSPACE_TREE_NAME;
+    return {
+      treeNameOrTreeId: tree,
+      treeType: treeTypeFromRef(tree),
+      ...(contextSpec ? { context: contextSpec } : {}),
+      ...(Array.isArray(featureArray) && featureArray.length ? { allOf: featureArray } : {})
+    };
   }
 
   async removeWorkspaceDocuments(workspaceNameOrId, documentIds, contextSpec = '/', featureArray = [], treeNameOrTreeId = DEFAULT_WORKSPACE_TREE_NAME) {
     await this.ensureWorkspaceStarted(workspaceNameOrId);
-    // DELETE /workspaces/:id/documents/remove with body and query
-    const endpoint = `/workspaces/${encodeURIComponent(workspaceNameOrId)}/documents/remove`;
-    const url = new URL(this.buildUrl(endpoint));
-    url.searchParams.set('treeNameOrTreeId', treeNameOrTreeId || DEFAULT_WORKSPACE_TREE_NAME);
-    { const t = treeTypeFromRef(treeNameOrTreeId || DEFAULT_WORKSPACE_TREE_NAME); if (t) url.searchParams.set('treeType', t); }
-    if (contextSpec) url.searchParams.set('context', contextSpec);
-    if (Array.isArray(featureArray)) {
-      for (const f of featureArray) url.searchParams.append('allOf', f);
-    }
-    const ids = this.normalizeDocumentIds(documentIds);
-    return await this.fetchDeleteWithJson(url.toString(), ids);
+    return await this._req('DELETE', routes.workspaces.documentsRemove(encodeURIComponent(workspaceNameOrId)), {
+      params: this._workspaceDocumentsParams(contextSpec, featureArray, treeNameOrTreeId),
+      data: this.normalizeDocumentIds(documentIds),
+      timeout: 0 // bulk removals had no client timeout historically
+    });
   }
 
   async deleteWorkspaceDocuments(workspaceNameOrId, documentIds, contextSpec = '/', featureArray = [], treeNameOrTreeId = DEFAULT_WORKSPACE_TREE_NAME) {
     await this.ensureWorkspaceStarted(workspaceNameOrId);
-    // DELETE /workspaces/:id/documents with body and query
-    const endpoint = `/workspaces/${encodeURIComponent(workspaceNameOrId)}/documents`;
-    const url = new URL(this.buildUrl(endpoint));
-    url.searchParams.set('treeNameOrTreeId', treeNameOrTreeId || DEFAULT_WORKSPACE_TREE_NAME);
-    { const t = treeTypeFromRef(treeNameOrTreeId || DEFAULT_WORKSPACE_TREE_NAME); if (t) url.searchParams.set('treeType', t); }
-    if (contextSpec) url.searchParams.set('context', contextSpec);
-    if (Array.isArray(featureArray)) {
-      for (const f of featureArray) url.searchParams.append('allOf', f);
-    }
-    const ids = this.normalizeDocumentIds(documentIds);
-    return await this.fetchDeleteWithJson(url.toString(), ids);
+    return await this._req('DELETE', routes.workspaces.documents(encodeURIComponent(workspaceNameOrId)), {
+      params: this._workspaceDocumentsParams(contextSpec, featureArray, treeNameOrTreeId),
+      data: this.normalizeDocumentIds(documentIds),
+      timeout: 0 // bulk deletions had no client timeout historically
+    });
   }
 
   // Workspace tree operations.
@@ -750,12 +628,17 @@ Firefox blocks local network requests for security reasons.
     const encodedPath = String(path || '/').split('/').filter(Boolean).map(encodeURIComponent).join('/');
     const body = { autoCreateLayers };
     if (data && typeof data === 'object') Object.assign(body, data);
-    return await this.put(`${this.getWorkspaceTreeRoute(workspaceNameOrId, treeNameOrTreeId)}/path/${encodedPath}`, body);
+    const tree = treeNameOrTreeId || DEFAULT_WORKSPACE_TREE_NAME;
+    return await this._req(
+      'PUT',
+      routes.workspaces.treePath(encodeURIComponent(workspaceNameOrId), tree, encodedPath),
+      { data: body }
+    );
   }
 
   // Context tree operations
   async insertContextPath(contextId, path, autoCreateLayers = true) {
-    return await this.post(`/contexts/${contextId}/tree/paths`, { path, autoCreateLayers });
+    return await this._req('POST', routes.contexts.treePaths(contextId), { data: { path, autoCreateLayers } });
   }
 
   // Document methods (tabs)
@@ -768,7 +651,7 @@ Firefox blocks local network requests for security reasons.
 
     // Get sync settings to check if we should filter by browser instance
     const syncSettings = await browserStorage.getSyncSettings();
-    if (this.isBrowserScopedSyncEnabled(syncSettings)) {
+    if (syncSettings?.syncOnlyCurrentBrowser || syncSettings?.syncOnlyThisBrowser) {
       const browserIdentity = await browserStorage.getBrowserIdentity();
       if (browserIdentity) {
         const browserTag = `tag/${browserIdentity}`;
@@ -778,108 +661,72 @@ Firefox blocks local network requests for security reasons.
       }
     }
 
-    let endpoint = `/contexts/${contextId}/documents`;
+    return await this._req('GET', routes.contexts.documents(contextId), {
+      params: {
+        ...(enhancedFeatureArray.length > 0 ? { allOf: enhancedFeatureArray } : {}),
+        ...(Number.isFinite(options.limit) ? { limit: options.limit } : {}),
+        ...(Number.isFinite(options.offset) ? { offset: options.offset } : {}),
+        // Revalidation read: the payload comes back as document ids, not documents.
+        ...(options.idsOnly ? { idsOnly: 'true' } : {})
+      }
+    });
+  }
 
-    const params = new URLSearchParams();
-
-    // Add feature array as query parameters if provided
-    if (enhancedFeatureArray.length > 0) {
-      enhancedFeatureArray.forEach(feature => params.append('allOf', feature));
+  // Always add browser identity for context document writes
+  async _withBrowserTag(featureArray) {
+    const enhancedFeatureArray = [...featureArray];
+    const browserIdentity = await browserStorage.getBrowserIdentity();
+    if (browserIdentity) {
+      const browserTag = `tag/${browserIdentity}`;
+      if (!enhancedFeatureArray.includes(browserTag)) {
+        enhancedFeatureArray.push(browserTag);
+      }
     }
-    if (Number.isFinite(options.limit)) params.set('limit', String(options.limit));
-    if (Number.isFinite(options.offset)) params.set('offset', String(options.offset));
-    // Revalidation read: the payload comes back as document ids, not documents.
-    if (options.idsOnly) params.set('idsOnly', 'true');
-    const query = params.toString();
-    if (query) endpoint += `?${query}`;
-
-    return await this.get(endpoint);
+    return enhancedFeatureArray;
   }
 
   async insertDocument(contextId, document, featureArray = []) {
-    // Always add browser identity for POST operations
-    const enhancedFeatureArray = [...featureArray];
-    const browserIdentity = await browserStorage.getBrowserIdentity();
-    if (browserIdentity) {
-      const browserTag = `tag/${browserIdentity}`;
-      if (!enhancedFeatureArray.includes(browserTag)) {
-        enhancedFeatureArray.push(browserTag);
-      }
-    }
-
-    const data = {
-      documents: document,  // Server expects "documents" (can be single object)
-      features: enhancedFeatureArray
-    };
-    return await this.post(`/contexts/${contextId}/documents`, data);
+    const features = await this._withBrowserTag(featureArray);
+    // Server expects "documents" (can be single object)
+    return await this._req('POST', routes.contexts.documents(contextId), {
+      data: { documents: document, features }
+    });
   }
 
   async insertDocuments(contextId, documents, featureArray = []) {
-    // Always add browser identity for POST operations
-    const enhancedFeatureArray = [...featureArray];
-    const browserIdentity = await browserStorage.getBrowserIdentity();
-    if (browserIdentity) {
-      const browserTag = `tag/${browserIdentity}`;
-      if (!enhancedFeatureArray.includes(browserTag)) {
-        enhancedFeatureArray.push(browserTag);
-      }
-    }
-
-    const data = {
-      documents,
-      features: enhancedFeatureArray
-    };
-    return await this.post(`/contexts/${contextId}/documents`, data);
-  }
-
-  async updateDocument(contextId, documentId, document, featureArray = []) {
-    // Always add browser identity for PUT operations
-    const enhancedFeatureArray = [...featureArray];
-    const browserIdentity = await browserStorage.getBrowserIdentity();
-    if (browserIdentity) {
-      const browserTag = `tag/${browserIdentity}`;
-      if (!enhancedFeatureArray.includes(browserTag)) {
-        enhancedFeatureArray.push(browserTag);
-      }
-    }
-
-    const doc = typeof document === 'object' ? { ...document, id: documentId } : { id: documentId };
-    const data = {
-      documents: [doc],
-      features: enhancedFeatureArray
-    };
-    return await this.put(`/contexts/${contextId}/documents`, data);
+    const features = await this._withBrowserTag(featureArray);
+    return await this._req('POST', routes.contexts.documents(contextId), {
+      data: { documents, features }
+    });
   }
 
   async removeDocument(contextId, documentId) {
-    // Server route: DELETE /contexts/:id/documents/remove (body: [ids], optional featureArray query)
-    const endpoint = `/contexts/${contextId}/documents/remove`;
-    const url = new URL(this.buildUrl(endpoint));
-    const ids = this.normalizeDocumentIds([documentId]);
-    return await this.fetchDeleteWithJson(url.toString(), ids);
+    // Server route: DELETE /contexts/:id/documents/remove (body: [ids])
+    return await this._req('DELETE', routes.contexts.documentsRemove(contextId), {
+      data: this.normalizeDocumentIds([documentId]),
+      timeout: 0 // remove/delete-with-body had no client timeout historically
+    });
   }
 
   async removeDocuments(contextId, documentIds, featureArray = []) {
     // Server route: DELETE /contexts/:id/documents/remove (body: [ids], featureArray query)
-    const endpoint = `/contexts/${contextId}/documents/remove`;
-    const url = new URL(this.buildUrl(endpoint));
-    if (Array.isArray(featureArray)) {
-      for (const f of featureArray) url.searchParams.append('allOf', f);
-    }
-    const ids = this.normalizeDocumentIds(documentIds);
-    return await this.fetchDeleteWithJson(url.toString(), ids);
+    return await this._req('DELETE', routes.contexts.documentsRemove(contextId), {
+      params: Array.isArray(featureArray) && featureArray.length ? { allOf: featureArray } : {},
+      data: this.normalizeDocumentIds(documentIds),
+      timeout: 0
+    });
   }
 
   async deleteDocument(contextId, documentId) {
-    return await this.delete(`/contexts/${contextId}/documents/${documentId}`);
+    return await this._req('DELETE', routes.contexts.document(contextId, documentId));
   }
 
   async deleteDocuments(contextId, documentIds) {
     // Server route: DELETE /contexts/:id/documents (body: [ids]) - direct DB deletion (owner-only)
-    const endpoint = `/contexts/${contextId}/documents`;
-    const url = new URL(this.buildUrl(endpoint));
-    const ids = this.normalizeDocumentIds(documentIds);
-    return await this.fetchDeleteWithJson(url.toString(), ids);
+    return await this._req('DELETE', routes.contexts.documents(contextId), {
+      data: this.normalizeDocumentIds(documentIds),
+      timeout: 0
+    });
   }
 }
 
