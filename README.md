@@ -14,6 +14,21 @@ Switching back-and-forth between your tasks organized in a virtual "context" tre
 
 Extension allows you to (aot) work with tabs collaboratively, your significant other can bind to your context and open/close tabs in real-time, lets say to collaboratively pick an airbnb rental.
 
+## Features
+
+- **Instant popup opens.** Documents and the context tree are cached locally
+  (`chrome.storage.local`) and rendered immediately when the popup opens, then
+  revalidated against the server in the background. The cache is normalized —
+  one copy of each document, shared by every tree path that lists it — and the
+  service worker keeps it warm from server websocket events even while the
+  popup is closed.
+- **Tab state restore across context switches.** Pinned state is synced as part
+  of the document; window placement, tab order, mute state and tab group are
+  remembered per-browser and restored best-effort when you switch back to a
+  context (falling back to a plain open if the recorded window is gone).
+- **Live connection status.** The popup and sidebar refresh automatically on
+  connect and disconnect.
+
 ## Screenshots
 
 ### Extension Popup
