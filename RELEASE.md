@@ -1,216 +1,104 @@
 # Canvas Browser Extension Release Guide
 
-This document explains how to create and manage releases for Canvas Browser Extension.
+Two separate things, on two different cadences:
 
-## Release Strategy
+1. **The GitHub release** — automatic, every version, built in CI.
+2. **The store submissions** — manual, occasional, done by a human when a
+   version is worth shipping to users.
 
-We use **GitHub Actions** for automated builds and releases, triggered by Git tags. This ensures consistent, reproducible builds across all supported browsers.
+Don't confuse them. Tagging a version does *not* put it in front of users.
 
-### Release Types
-
-- **Stable releases**: `v2.0.0`, `v2.1.3` - Full releases
-- **Pre-releases**: `v2.0.0-alpha.1`, `v2.1.0-beta.2` - Automatically marked as pre-release
-- **Development builds**: Built on every push to `main`/`develop` (available as artifacts)
-
-## Creating a Release
-
-### 1. Prepare for Release
+## 1. GitHub release (automatic)
 
 ```bash
-# Ensure you're on main branch and up to date
-git checkout main
-git pull origin main
-
-# Run tests and build locally
-npm run build:dev
-# Test both packages
-unzip -t packages/canvas-extension-chromium.zip
-unzip -t packages/canvas-extension-firefox.zip
-
-# Update version in package.json if needed
-npm version patch  # or minor, major
+# from the monorepo root, on a clean main
+npm run release:extension -- --bump patch     # or minor / major
 ```
 
-### 2. Create and Push Tag
+That bumps the version in **all three** files (`package.json`,
+`manifest-chromium.json`, `manifest-firefox.json`), commits, pushes `main`,
+and pushes the tag `extension-v<version>`. CI takes it from there.
 
-```bash
-# Create a new tag (this triggers the release workflow)
-git tag v2.0.0
+**You usually don't need to run anything.** `auto-release.yml` runs the same
+script on every push to `main` and releases any app whose version has no tag
+yet — so bumping the version in an ordinary commit is enough.
 
-# Push the tag to GitHub
-git push origin v2.0.0
-```
+The `extension` job in `.github/workflows/release.yml` then:
 
-### 3. Automated Release Process
+1. **Asserts** the tag matches `package.json` *and* both manifests. All three
+   must agree or the job fails — this is why you bump with the script rather
+   than editing `package.json` by hand.
+2. **Builds** on a clean runner with a frozen lockfile.
+3. **Validates** both zips with `unzip -t` and writes `SHA256SUMS`.
+4. **Attaches** `canvas-extension-chromium.zip` and
+   `canvas-extension-firefox.zip` to the GitHub Release for the tag.
 
-Once you push a tag, GitHub Actions will automatically:
+Until recently this was built on a maintainer's laptop and uploaded with
+`gh release create`. It builds in CI now, so the artifact users install is
+reproducible from a known commit.
 
-1. ✅ **Extract version** from the tag
-2. ✅ **Update version** in package.json and manifest files
-3. ✅ **Build packages** for both browsers:
-   - Chromium-based browsers (Chrome, Edge, Brave, Opera)
-   - Firefox
-4. ✅ **Test packages** to ensure they work and are valid
-5. ✅ **Create ZIP archives** with proper naming
-6. ✅ **Generate checksums** for verification
-7. ✅ **Create GitHub Release** with:
-   - Professional release notes
-   - Download links for both browser packages
-   - Installation instructions
-   - Checksum verification guide
+Watch it: `gh run list --workflow=release.yml --limit 1`
 
-### 4. Post-Release
+## 2. Store submissions (manual)
 
-After the automated release:
+The extension is live on both stores:
 
-1. **Verify the release** on GitHub
-2. **Test installations** on different browsers
-3. **Update documentation** if needed
-4. **Submit to browser stores** (when available):
-   - Chrome Web Store
-   - Firefox Add-ons (AMO)
-   - Edge Add-ons
+| Browser | Listing | Dashboard |
+| --- | --- | --- |
+| Chrome / Chromium | [Chrome Web Store](https://chromewebstore.google.com/detail/nddefgjgkhcpmgpipifjacmoinoncdgl) | [Developer Dashboard](https://chrome.google.com/webstore/devconsole) |
+| Firefox | [Firefox Add-ons](https://addons.mozilla.org/en-US/firefox/addon/canvas-browser-extension) | [Developer Hub](https://addons.mozilla.org/developers/) |
+| Edge | not listed | [Partner Center](https://partner.microsoft.com/dashboard/microsoftedge) |
 
-## Browser Store Submission
+**Upload the zips from the GitHub release** — not a local build. They are the
+exact validated artifacts, and using them keeps what's in the store traceable
+to a tag and a commit.
 
-### Chrome Web Store
-- Package: Use the Chromium ZIP from GitHub releases
-- Developer Dashboard: [Chrome Web Store Developer Dashboard](https://chrome.google.com/webstore/devconsole)
-- Review time: Typically 1-3 business days
+- Chrome Web Store → `canvas-extension-chromium.zip`. Review is typically 1–3
+  business days.
+- Firefox AMO → `canvas-extension-firefox.zip`. Review is typically 1–7 days.
+  AMO requires a **source code upload** alongside the package, because the
+  build is bundled and minified by esbuild; point the reviewer at `build.mjs`.
+- Edge accepts the Chromium zip unchanged, if the listing is ever created.
 
-### Firefox Add-ons (AMO)
-- Package: Use the Firefox ZIP from GitHub releases
-- Developer Hub: [Firefox Add-on Developer Hub](https://addons.mozilla.org/developers/)
-- Review time: Typically 1-7 days depending on complexity
+Not every tagged version needs to go to the stores, and historically most
+haven't. Store review queues are slow and can't be cancelled once submitted,
+so batching several versions into one submission is a legitimate choice.
 
-### Edge Add-ons
-- Package: Use the Chromium ZIP (compatible with Edge)
-- Partner Center: [Microsoft Edge Add-ons Partner Center](https://partner.microsoft.com/dashboard/microsoftedge)
-- Review time: Typically 1-7 business days
+## Automating the submissions
 
-## Manual Release (Emergency/Testing)
+This is the obvious next step whenever the release cadence makes it worth it.
+The shape:
 
-If you need to create a release manually:
+- Chrome Web Store — `chrome-webstore-upload-cli`, needs `CLIENT_ID`,
+  `CLIENT_SECRET`, `REFRESH_TOKEN`, `EXTENSION_ID`.
+- Firefox AMO — `web-ext sign`, needs a JWT issuer and secret.
+- Edge — Partner Center API, needs a product ID and client credentials.
 
-```bash
-cd extensions/browser-extensions
+Put them in a **GitHub Environment with a required reviewer**, not plain
+secrets on the job. A submission is irreversible and enters a human review
+queue; a stray version bump must not be able to fire three of them
+unattended. The approval gate is what preserves today's "not every version
+ships" behaviour while removing the manual upload.
 
-# Install dependencies
-npm ci
+## Versions
 
-# Build production packages
-npm run build
+The version lives in three files that must always agree: `package.json`,
+`manifest-chromium.json`, `manifest-firefox.json`. `npm run release:extension
+-- --bump <level>` keeps them in sync; CI enforces it.
 
-# Verify packages exist
-ls -la packages/
+Note the stores have their own rules — Chrome will reject an upload whose
+manifest version isn't strictly greater than the published one, so a version
+you skipped is simply skipped, never reused.
 
-# Create release directory
-mkdir -p release-assets
+## Rollback
 
-# Copy packages with versioned names
-cp packages/canvas-extension-chromium.zip release-assets/canvas-extension-2.0.0-chromium.zip
-cp packages/canvas-extension-firefox.zip release-assets/canvas-extension-2.0.0-firefox.zip
+- **GitHub**: mark the release as a pre-release to bury it, or delete the tag
+  if nothing consumed it:
+  `git tag -d extension-v3.0.1 && git push origin :refs/tags/extension-v3.0.1`
+- **Stores**: you cannot pull a version once approved. Roll forward — bump,
+  release, submit again. In an emergency, unpublish the listing from the
+  dashboard; this removes it for new users but leaves existing installs on the
+  bad version until they update.
 
-# Generate checksums
-cd release-assets
-sha256sum *.zip > checksums.txt
-
-# Upload to GitHub manually via web interface
-```
-
-## Version Numbering
-
-We follow [Semantic Versioning](https://semver.org/):
-
-- **MAJOR.MINOR.PATCH** (e.g., `v2.1.3`)
-- **MAJOR**: Breaking changes or major feature additions
-- **MINOR**: New features (backwards compatible)
-- **PATCH**: Bug fixes (backwards compatible)
-
-### Pre-release Versions
-
-- **Alpha**: `v2.0.0-alpha.1` - Early testing, unstable
-- **Beta**: `v2.0.0-beta.1` - Feature complete, testing for bugs
-- **RC**: `v2.0.0-rc.1` - Release candidate, final testing
-
-## Release Checklist
-
-Before creating a release:
-
-- [ ] All tests pass locally
-- [ ] Version numbers updated in package.json and manifests
-- [ ] DEVELOPMENT.md updated (if maintained)
-- [ ] No critical issues in GitHub Issues
-- [ ] Extension works on all supported browsers
-- [ ] Canvas server compatibility verified
-- [ ] Main branch is stable
-
-After release:
-
-- [ ] GitHub release created successfully
-- [ ] Both browser packages download and install correctly
-- [ ] Extension functions properly in both browsers
-- [ ] Checksums verify correctly
-- [ ] Release notes are accurate and helpful
-- [ ] Store submissions prepared (if applicable)
-
-## Hotfix Releases
-
-For critical bug fixes:
-
-1. Create a hotfix branch from the release tag
-2. Apply the minimal fix
-3. Test thoroughly on both browsers
-4. Create a new patch version tag
-5. The automation will handle the rest
-
-```bash
-git checkout v2.0.0
-git checkout -b hotfix/v2.0.1
-# Make fixes
-git commit -m "Fix critical extension bug"
-git tag v2.0.1
-git push origin v2.0.1
-```
-
-## Rollback Strategy
-
-If a release has critical issues:
-
-1. **Immediate**: Mark the GitHub release as "Pre-release" to reduce visibility
-2. **Short-term**: Create a new hotfix release
-3. **Browser stores**: Update store listings if the extension was already submitted
-4. **Long-term**: Delete the problematic release if necessary
-
-```bash
-# Delete a tag locally and remotely (use carefully!)
-git tag -d v2.0.0
-git push origin :refs/tags/v2.0.0
-```
-
-## Monitoring Releases
-
-- **GitHub Actions**: Monitor build status at `/actions`
-- **Downloads**: Track download stats on the releases page
-- **Issues**: Watch for reports of broken packages or installation problems
-- **Browser compatibility**: Monitor for browser update compatibility issues
-- **Store reviews**: Monitor browser store reviews and ratings
-
-## Security Considerations
-
-- **Package integrity**: Always verify with provided SHA256 hashes
-- **Manifest validation**: Automated validation of manifest files during build
-- **Supply chain**: All builds happen in clean GitHub Actions environments
-- **Provenance**: Full build logs available in GitHub Actions
-- **Store security**: Browser stores provide additional security review
-
-## Future Enhancements
-
-Planned improvements to the release process:
-
-- [ ] **Automated store submissions** for Chrome Web Store and Firefox AMO
-- [ ] **Auto-update mechanism** for sideloaded extensions
-- [ ] **Beta channel** for pre-release testing
-- [ ] **Automated changelog generation** from commit messages
-- [ ] **Extension performance monitoring** and metrics
-- [ ] **Automated browser compatibility testing** 
+Since store submission is manual, a bad tag caught before submission costs
+nothing. That's a real advantage of the current gap between the two steps.

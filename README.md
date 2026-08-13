@@ -56,14 +56,19 @@ Extension allows you to (aot) work with tabs collaboratively, your significant o
 | **Chrome/Chromium** | [Chrome Web Store](https://chromewebstore.google.com/detail/nddefgjgkhcpmgpipifjacmoinoncdgl) |
 | **Firefox** | [Firefox Add-ons](https://addons.mozilla.org/en-US/firefox/addon/canvas-browser-extension) |
 
-### Method 2: Download Release Package (TBD)
+### Method 2: Download Release Package
 
-Download the latest release for your browser:
+Every tagged version is built in CI and attached to a GitHub release, which is
+usually ahead of the store listings — store submissions happen in batches (see
+[RELEASE.md](RELEASE.md)).
 
 | Browser | Download |
 |---------|----------|
-| **Chromium-based** (Chrome, Edge, Brave, Opera) | [📦 canvas-extension-chromium.zip](https://github.com/canvas-ui/canvas-browser-extensions/releases/latest) |
-| **Firefox** | [📦 canvas-extension-firefox.zip](https://github.com/canvas-ui/canvas-browser-extensions/releases/latest) |
+| **Chromium-based** (Chrome, Edge, Brave, Opera) | [📦 canvas-extension-chromium.zip](https://github.com/canvas-ui/canvas/releases/latest) |
+| **Firefox** | [📦 canvas-extension-firefox.zip](https://github.com/canvas-ui/canvas/releases/latest) |
+
+Releases also ship `SHA256SUMS`; verify with
+`sha256sum -c SHA256SUMS --ignore-missing`.
 
 **Installation steps:**
 
