@@ -587,7 +587,7 @@ tabsAPI.onUpdated.addListener(async (tabId, changeInfo, tab) => {
           // Workspace mode: insert document into workspace with contextSpec
           const document = tabManager.convertTabToDocument(tab, browserIdentity, syncSettings);
           const wsId = currentWorkspace.name || currentWorkspace.id;
-          const response = await apiClient.insertWorkspaceDocument(wsId, document, workspacePath || '/', document.featureArray, await browserStorage.getWorkspaceTreeRef());
+          const response = await apiClient.insertWorkspaceDocument(wsId, document, workspacePath || '/', document.features, await browserStorage.getWorkspaceTreeRef());
           if (response.status === 'success') {
             const docId = Array.isArray(response.payload) ? response.payload[0] : response.payload;
             tabManager.markTabAsSynced(tab.id, docId, document.data?.url);
@@ -2379,7 +2379,7 @@ async function handleSyncTab(data, sendResponse) {
       const wsId = currentWorkspace?.name || currentWorkspace?.id;
       if (!wsId) throw new Error('No workspace selected');
       const document = tabManager.convertTabToDocument(tab, browserIdentity, syncSettings);
-      const resp = await apiClient.insertWorkspaceDocument(wsId, document, contextSpec || workspacePath || '/', document.featureArray, await browserStorage.getWorkspaceTreeRef());
+      const resp = await apiClient.insertWorkspaceDocument(wsId, document, contextSpec || workspacePath || '/', document.features, await browserStorage.getWorkspaceTreeRef());
       if (resp.status === 'success') {
         const docId = Array.isArray(resp.payload) ? resp.payload[0] : resp.payload;
         tabManager.markTabAsSynced(tab.id, docId, document.data?.url);
@@ -2483,7 +2483,7 @@ async function handleSyncMultipleTabs(data, sendResponse) {
       if (!wsId) throw new Error('No workspace selected');
       console.log(`🔧 Syncing multiple tabs to workspace ${wsId} at path ${contextSpec || workspacePath || '/'}...`);
       const docs = tabs.map(tab => tabManager.convertTabToDocument(tab, browserIdentity, syncSettings));
-      const resp = await apiClient.insertWorkspaceDocuments(wsId, docs, contextSpec || workspacePath || '/', docs[0]?.featureArray || [], await browserStorage.getWorkspaceTreeRef());
+      const resp = await apiClient.insertWorkspaceDocuments(wsId, docs, contextSpec || workspacePath || '/', docs[0]?.features || [], await browserStorage.getWorkspaceTreeRef());
       if (resp.status === 'success') {
         const documentIds = Array.isArray(resp.payload) ? resp.payload : [resp.payload];
         tabs.forEach((tab, index) => {

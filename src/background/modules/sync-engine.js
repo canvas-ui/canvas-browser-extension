@@ -262,7 +262,7 @@ export class SyncEngine {
         // Check if we should open this tab (filter by browser identity if enabled)
         if (this.isBrowserScopedSyncEnabled(syncSettings)) {
           const browserIdentity = await browserStorage.getBrowserIdentity();
-          const hasOurFeature = document.featureArray?.includes(`tag/${browserIdentity}`);
+          const hasOurFeature = document.features?.includes(`tag/${browserIdentity}`);
 
           if (hasOurFeature) {
             console.log('SyncEngine: Skipping tab from same browser instance');
@@ -339,7 +339,7 @@ export class SyncEngine {
               // Check if we should open this tab (filter by browser identity if enabled)
               if (this.isBrowserScopedSyncEnabled(syncSettings)) {
                 const browserIdentity = await browserStorage.getBrowserIdentity();
-                const hasOurFeature = document.featureArray?.includes(`tag/${browserIdentity}`);
+                const hasOurFeature = document.features?.includes(`tag/${browserIdentity}`);
 
                 if (hasOurFeature) {
                   console.log('SyncEngine: Skipping tab from same browser instance (tree event)');
@@ -908,7 +908,7 @@ export class SyncEngine {
       if (syncSettings.sendNewTabsToCanvas && comparison.browserToCanvas.length > 0) {
         const browserIdentity = await browserStorage.getBrowserIdentity();
         const documents = comparison.browserToCanvas.map(tab => tabManager.convertTabToDocument(tab, browserIdentity, syncSettings));
-        await apiClient.insertWorkspaceDocuments(wsId, documents, workspacePath || '/', documents[0]?.featureArray || [], await browserStorage.getWorkspaceTreeRef());
+        await apiClient.insertWorkspaceDocuments(wsId, documents, workspacePath || '/', documents[0]?.features || [], await browserStorage.getWorkspaceTreeRef());
         reportSyncSuccess(comparison.browserToCanvas.length, workspacePath || '/');
       }
 
@@ -1200,7 +1200,7 @@ export class SyncEngine {
       const wsId = workspace?.name || workspace?.id;
       if (wsId) {
         const docs = browserTabs.map(tab => tabManager.convertTabToDocument(tab, browserIdentity, syncSettings));
-        await apiClient.insertWorkspaceDocuments(wsId, docs, workspacePath || '/', docs[0]?.featureArray || [], await browserStorage.getWorkspaceTreeRef());
+        await apiClient.insertWorkspaceDocuments(wsId, docs, workspacePath || '/', docs[0]?.features || [], await browserStorage.getWorkspaceTreeRef());
       }
     }
   }

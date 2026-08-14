@@ -1,6 +1,8 @@
 // Tab Manager module for Canvas Extension
 // Handles browser tab operations and Canvas document conversion
 
+import { buildTabDoc } from '@augmentd-labs/canvas-schemas';
+
 import { browserStorage } from './browser-storage.js';
 import { confirmLargeTabOperation } from './large-operation-confirm.js';
 
@@ -115,29 +117,34 @@ export class TabManager {
   // Convert browser tab to Canvas document format (based on PAYLOAD.md format)
   convertTabToDocument(tab, browserIdentity, syncSettings = {}) {
     const normalizedUrl = normalizeTabUrl(tab.url, syncSettings);
+    // Features go doc-level (`features`), NOT `featureArray`: synapsd's Document
+    // reads only `features` (v3) / legacy `metadata.features`, so the old
+    // top-level `featureArray` was inert — tags ticked the context bitmaps via
+    // the request body but were never stored on the row, which is why removing
+    // a tag could not untick it (nothing to diff the new array against).
     const document = {
-      schema: 'data/schema/tab',
-      schemaVersion: '2.0',
-      data: {
-        pinned: tab.pinned,
-        url: normalizedUrl,
+      ...buildTabDoc(normalizedUrl, {
         title: tab.title,
         favIconUrl: tab.favIconUrl,
-        timestamp: new Date().toISOString()
-      },
-      featureArray: this.generateFeatureArray(browserIdentity, syncSettings),
-      metadata: {
-        contentType: 'application/json',
-        contentEncoding: 'utf8'
-      }
+        pinned: tab.pinned,
+        timestamp: new Date().toISOString(),
+        metadata: {
+          contentType: 'application/json',
+          contentEncoding: 'utf8'
+        }
+      }),
+      features: this.generateFeatures(browserIdentity, syncSettings)
     };
 
     console.log('Converted tab to Canvas document:', document);
     return document;
   }
 
-  // Generate feature array for tab document
-  generateFeatureArray(browserIdentity, syncSettings = {}) {
+  // Generate the asserted feature array for a tab document.
+  // `data/schema/tab` is included for the request-body/query side (it is what
+  // the list filters match on); synapsd strips it from the stored array as a
+  // derived key, keeping only client/app/*, tag/* and custom/tag/*.
+  generateFeatures(browserIdentity, syncSettings = {}) {
     const features = ['data/schema/tab'];
 
     // Add browser type
@@ -917,7 +924,7 @@ export class TabManager {
         schema: document.schema,
         url: document.data.url,
         title: document.data.title,
-        featureArrayLength: document.featureArray?.length
+        featuresLength: document.features?.length
       });
 
       console.log('🔧 TabManager.syncTabToCanvas: Making API call to insertDocument...');
@@ -928,11 +935,11 @@ export class TabManager {
         serverUrl: apiClient?.serverUrl || 'missing'
       });
 
-      // Send to Canvas API (use insertDocument with feature array)
+      // Send to Canvas API (features double as the request-body tick list)
       const response = await apiClient.insertDocument(
         contextId,
         document,
-        document.featureArray
+        document.features
       );
 
       console.log('🔧 TabManager.syncTabToCanvas: API response:', response);
@@ -1219,7 +1226,7 @@ export class TabManager {
       const response = await apiClient.insertDocuments(
         contextId,
         documents,
-        documents[0]?.featureArray || [] // All tabs should have same feature array
+        documents[0]?.features || [] // All tabs should have the same features
       );
 
       console.log('🔧 TabManager.syncMultipleTabs: Batch API response:', response);

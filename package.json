@@ -1,6 +1,6 @@
 {
   "name": "canvas-browser-extension",
-  "version": "3.0.1",
+  "version": "3.1.0",
   "description": "Canvas Browser Extension for seamless tab synchronization",
   "type": "module",
   "scripts": {
@@ -34,6 +34,7 @@
   "dependencies": {
     "@augmentd-labs/canvas-api-client": "workspace:*",
     "@augmentd-labs/canvas-protocol": "workspace:*",
+    "@augmentd-labs/canvas-schemas": "workspace:*",
     "iconify-icon": "^3.0.2",
     "socket.io-client": "^4.8.3"
   },
