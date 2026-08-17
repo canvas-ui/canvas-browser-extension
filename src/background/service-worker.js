@@ -40,7 +40,7 @@ async function setSessionBadge(state) {
     if (state === 'expired') {
       await actionAPI.setBadgeText({ text: '!' });
       if (actionAPI.setBadgeBackgroundColor) await actionAPI.setBadgeBackgroundColor({ color: '#dc2626' });
-      if (actionAPI.setTitle) await actionAPI.setTitle({ title: 'Canvas: session expired — click to reconnect' });
+      if (actionAPI.setTitle) await actionAPI.setTitle({ title: 'Canvas: session expired. Click to reconnect' });
     } else {
       await actionAPI.setBadgeText({ text: '' });
       if (actionAPI.setTitle) await actionAPI.setTitle({ title: 'Canvas Browser Extension' });
@@ -438,7 +438,7 @@ async function handleAuthExpired() {
   // OS notification, since this fires on every failed sync attempt while
   // disconnected and would otherwise spam the user repeatedly.
   await setSessionBadge('expired');
-  broadcastToast('Session expired — reconnect in Settings', 'error');
+  broadcastToast('Session expired. Reconnect in Settings', 'error');
   broadcastToPopup('auth.session.expired', {});
 }
 

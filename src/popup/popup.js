@@ -224,7 +224,7 @@ runtime.onMessage.addListener((message) => {
       currentConnection.connected = false;
       updateConnectionStatus(currentConnection);
       showSessionExpiredBanner();
-      showToast('Session expired — reconnect in Settings', 'error');
+      showToast('Session expired. Reconnect in Settings', 'error');
       break;
 
     case 'auth.session.renewed':
@@ -1145,7 +1145,7 @@ function updateCanvasPageIndicator() {
 
   canvasPageIndicator.style.display = '';
   canvasPageIndicator.textContent = `${currentPage}/${totalPages} (${totalCount.toLocaleString()})`;
-  canvasPageIndicator.title = `Page ${currentPage} of ${totalPages} — ${totalCount.toLocaleString()} context tabs total`;
+  canvasPageIndicator.title = `Page ${currentPage} of ${totalPages} (${totalCount.toLocaleString()} context tabs total)`;
 }
 
 function normalizeCanvasFetchLimit(value) {
@@ -4301,7 +4301,7 @@ function removeSessionExpiredBanner() {
   if (existing) existing.remove();
 }
 
-function showSessionExpiredBanner(text = 'Session expired — tabs are no longer being synced.') {
+function showSessionExpiredBanner(text = 'Session expired. Tabs are no longer being synced.') {
   const existing = document.getElementById('session-expired-banner');
   if (existing) return;
 

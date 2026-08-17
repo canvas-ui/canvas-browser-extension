@@ -73,5 +73,5 @@ export function notifySyncError(error, label = 'Sync') {
   const isAuth = error?.name === 'AuthExpiredError' || /session expired/i.test(msg);
   // No OS fallback: this fires on every retry while offline/expired and the
   // toolbar badge + in-popup banner already surface the persistent state.
-  broadcastToast(isAuth ? 'Session expired — reconnect in Settings' : `${label} failed: ${msg}`, 'error');
+  broadcastToast(isAuth ? 'Session expired. Reconnect in Settings' : `${label} failed: ${msg}`, 'error');
 }
