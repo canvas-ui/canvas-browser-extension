@@ -159,6 +159,14 @@ export class WebSocketClient {
         this.socket.on('document.deleted', (payload) => this._handleDocumentEvent('document.deleted', payload));
         this.socket.on('document.removed.batch', (payload) => this._handleDocumentEvent('document.removed.batch', payload));
         this.socket.on('document.deleted.batch', (payload) => this._handleDocumentEvent('document.deleted.batch', payload));
+        // Membership events. document.updated / document.removed also fire for
+        // a link/unlink today, but only as deprecated membership-only aliases
+        // that carry no document — these are the ones to keep once the aliases
+        // are dropped.
+        this.socket.on('document.linked', (payload) => this._handleDocumentEvent('document.linked', payload));
+        this.socket.on('document.unlinked', (payload) => this._handleDocumentEvent('document.unlinked', payload));
+        this.socket.on('document.linked.batch', (payload) => this._handleDocumentEvent('document.linked.batch', payload));
+        this.socket.on('document.unlinked.batch', (payload) => this._handleDocumentEvent('document.unlinked.batch', payload));
 
         // Workspace document events use a different namespace/payload shape.
         // Normalize them so the sync engine can keep one code path.

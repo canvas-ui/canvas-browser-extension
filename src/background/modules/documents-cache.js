@@ -253,6 +253,12 @@ const EVENT_ACTIONS = {
   'document.deleted': removeDocumentsFromCache,
   'document.removed.batch': removeDocumentsFromCache,
   'document.deleted.batch': removeDocumentsFromCache,
+  // A link changes where a document lives, not what it is — the listings that
+  // held it are stale, the body is not. An unlink drops it from this scope.
+  'document.linked': updateDocumentInCache,
+  'document.linked.batch': updateDocumentInCache,
+  'document.unlinked': removeDocumentsFromCache,
+  'document.unlinked.batch': removeDocumentsFromCache,
   'tree.document.inserted': insertDocumentIntoCache,
   'tree.document.inserted.batch': insertDocumentIntoCache,
   'tree.document.updated': updateDocumentInCache,
