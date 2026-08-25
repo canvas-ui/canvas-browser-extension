@@ -8,10 +8,17 @@ Two separate things, on two different cadences:
 
 Don't confuse them. Tagging a version does *not* put it in front of users.
 
-## 1. GitHub release (automatic)
+## 1. GitHub release
+
+From the stack root:
 
 ```bash
-# from the monorepo root, on a clean main
+./canvas-release.sh --apps extension --bump patch
+```
+
+From the monorepo root:
+
+```bash
 npm run release:extension -- --bump patch     # or minor / major
 ```
 
@@ -19,9 +26,8 @@ That bumps the version in **all three** files (`package.json`,
 `manifest-chromium.json`, `manifest-firefox.json`), commits, pushes `main`,
 and pushes the tag `extension-v<version>`. CI takes it from there.
 
-**You usually don't need to run anything.** `auto-release.yml` runs the same
-script on every push to `main` and releases any app whose version has no tag
-yet — so bumping the version in an ordinary commit is enough.
+`canvas-release.sh` without `--apps` does the same for every app whose code
+moved. CI never tags on its own.
 
 The `extension` job in `.github/workflows/release.yml` then:
 
