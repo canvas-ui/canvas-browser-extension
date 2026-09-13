@@ -5,9 +5,9 @@
  *   npm run sync:theme
  *
  * source      canvas-web src/theme/css
- * synced-from 52a7539
- * source-hash afce8f9bba008b09
- * files       18
+ * synced-from 26134c6
+ * source-hash 2bb82847bf68167f
+ * files       20
  *
  * Tailwind's @theme / @utility / @custom-variant constructs have been unwrapped
  * or stripped by scripts/sync-theme.mjs — see that file for why a plain copy
@@ -306,8 +306,9 @@
   --spacing-fab-inset: max(1rem, var(--safe-bottom));
   /* Left-hand rail toggle, which sits tighter into the corner. */
   --spacing-rail-inset: max(0.5rem, var(--safe-bottom));
-  /* A control stacked directly above the rail toggle (toggle is 3rem + gap). */
-  --spacing-rail-stack: calc(max(0.5rem, var(--safe-bottom)) + 3.5rem);
+  /* A control stacked directly above the rail toggle (toggle is rail-width
+     sized so it stays column-aligned with the M0 card across densities). */
+  --spacing-rail-stack: calc(max(0.5rem, var(--safe-bottom)) + var(--layout-rail-width) + 0.5rem);
 
   /* ── Breakpoints ─────────────────────────────────────────────────────── */
   /* Named by the device class they describe. The raw numbers stay Tailwind's
@@ -444,6 +445,17 @@
   --btn-font-weight: 500;
   --btn-border-width: 1px;
 
+  /* ── Native popup (select dropdown) ──────────────────────────────────── */
+  /* The `<select>` listbox is painted by the BROWSER, not by us, and setting an
+     author background on the control (our selects are `bg-transparent`) makes
+     Chrome stop using its own `color-scheme`-aware surface for the popup and
+     fall back to a light one — so a dark theme rendered light-grey option text
+     on a near-white list. These must therefore be OPAQUE: a translucent value
+     composites over that light fallback and washes out. Defaults track the
+     popover; only a theme with translucent surfaces needs to override. */
+  --native-popup: var(--popover);
+  --native-popup-foreground: var(--popover-foreground);
+
   /* ── Input ───────────────────────────────────────────────────────────── */
   --input-radius: var(--radius-md);
   --input-height: var(--control-height-md);
@@ -456,11 +468,15 @@
   --card-shadow: var(--shadow-elevation-1);
 
   /* ── Sheet — the "page" surfaces float on the desk ───────────────────── */
-  --sheet-radius: var(--radius-xl);
+  /* Square by default (2026-09-07): shell surfaces — sheet, panels, the
+     toolbox — sit on the desk with no corner radius; the elevation alone
+     separates them. Controls keep their own radii above. A theme may still
+     override these two. */
+  --sheet-radius: 0;
   --sheet-shadow: var(--shadow-elevation-2);
 
   /* ── Panel — docked drawers and side panels ──────────────────────────── */
-  --panel-radius: var(--radius-xl);
+  --panel-radius: 0;
   --panel-shadow: var(--shadow-elevation-4);
   --panel-shadow-overlay: var(--shadow-elevation-5);
 
@@ -966,6 +982,320 @@
   --scrim-foreground: oklch(1 0 0);
 
   --shadow-color: oklch(0 0 0);
+}
+
+/* ═══ themes/frost.css ════════════════════════════════════════════════════ */
+
+/**
+ * Frost — frosted glass over a soft backdrop.
+ *
+ * Demonstrates the material axis: surfaces are translucent and blur whatever
+ * sits behind them (the desk gradient, or the user's wallpaper — this theme is
+ * at its best with one set). Translucency is pure palette work: every surface
+ * token carries alpha, and the runtime `@theme inline` bridge does the rest.
+ * Blur is the only part that needs element-level rules; those live at the
+ * bottom of this file and in the `--glass-backdrop` token consumed by the
+ * `surface-*` utilities — inert in every other theme.
+ *
+ * Deliberately NOT blurred: in-flow `bg-card` rows/tiles inside an already
+ * frosted sheet. A nested backdrop-filter cannot see through its parent's
+ * composited background, so it costs a GPU layer and changes nothing.
+ */
+
+[data-theme='frost'] {
+  /* The glass material. Consumed by surface-sheet/panel/panel-overlay and the
+     surface-glass utility; scrims get a lighter pass so the page behind a
+     modal reads as "behind" without being erased. */
+  --glass-backdrop: blur(18px) saturate(1.5);
+  --glass-scrim-backdrop: blur(8px);
+
+  /* Glass edges read through big soft shadows, not hard lines. */
+  --card-shadow: var(--shadow-elevation-2);
+}
+
+[data-theme='frost'][data-scheme='light'],
+[data-theme='frost'] [data-scheme='light'] {
+  color-scheme: light;
+
+  /* White glass on a pale grey-blue wall. */
+  --background: oklch(0.985 0.003 250 / 0.55);
+  --foreground: oklch(0.28 0.02 255);
+  --card: oklch(0.985 0.003 250 / 0.6);
+  --card-foreground: oklch(0.28 0.02 255);
+  /* Popovers float over arbitrary content — more opaque so text stays legible. */
+  --popover: oklch(0.985 0.005 250 / 0.82);
+  /* Same colour, no alpha: the browser-drawn select popup cannot blur what is
+     behind it, so glass would just read as washed-out. */
+  --native-popup: oklch(0.985 0.005 250);
+  --popover-foreground: oklch(0.28 0.02 255);
+  --desk: oklch(0.92 0.008 250);
+  /* Built-in backdrop so the glass reads even before the user picks a
+     wallpaper. A user wallpaper (inline style on <html>) overrides this. */
+  --wallpaper-image: linear-gradient(160deg, oklch(0.95 0.012 250), oklch(0.88 0.022 245) 55%, oklch(0.83 0.032 238));
+
+  --primary: oklch(0.45 0.045 255);
+  --primary-foreground: oklch(0.985 0.003 250);
+  --secondary: oklch(0.6 0.055 230);
+  --secondary-foreground: oklch(0.985 0.003 250);
+  /* Alpha surfaces: hover/selection is a whiter pane of the same glass. */
+  --muted: oklch(0.45 0.02 255 / 0.1);
+  --muted-foreground: oklch(0.44 0.02 255);
+  --accent: oklch(1 0 0 / 0.55);
+  --accent-foreground: oklch(0.28 0.02 255);
+
+  --destructive: oklch(0.56 0.14 22);
+  --destructive-foreground: oklch(0.985 0.003 250);
+  --destructive-subtle: oklch(0.62 0.14 22 / 0.14);
+  --success: oklch(0.62 0.12 150);
+  --success-foreground: oklch(0.985 0.003 250);
+  --success-subtle: oklch(0.62 0.12 150 / 0.14);
+  --warning: oklch(0.72 0.12 70);
+  --warning-foreground: oklch(0.28 0.02 255);
+  --warning-subtle: oklch(0.72 0.12 70 / 0.16);
+  --info: oklch(0.6 0.09 240);
+  --info-foreground: oklch(0.985 0.003 250);
+  --info-subtle: oklch(0.6 0.09 240 / 0.14);
+
+  /* The bright top-edge catchlight of glass, not a drawn line. */
+  --border: oklch(1 0 0 / 0.55);
+  --input: oklch(0.4 0.02 255 / 0.35);
+  --ring: oklch(0.55 0.05 250);
+  /* Lighter than usual — the scrim blur does the separating. */
+  --scrim: oklch(0.3 0.02 255 / 0.25);
+  --scrim-foreground: oklch(1 0 0);
+
+  --shadow-color: oklch(0.35 0.03 255);
+  --shadow-strength: 0.14;
+}
+
+[data-theme='frost'][data-scheme='dark'],
+[data-theme='frost'] [data-scheme='dark'] {
+  color-scheme: dark;
+
+  /* Smoked glass in a slate-blue room. */
+  --background: oklch(0.31 0.025 255 / 0.5);
+  --foreground: oklch(0.95 0.008 250);
+  --card: oklch(0.33 0.025 255 / 0.52);
+  --card-foreground: oklch(0.95 0.008 250);
+  --popover: oklch(0.3 0.028 255 / 0.85);
+  --popover-foreground: oklch(0.95 0.008 250);
+  --native-popup: oklch(0.3 0.028 255);
+  --desk: oklch(0.26 0.025 258);
+  --wallpaper-image: linear-gradient(160deg, oklch(0.42 0.04 260), oklch(0.31 0.045 265) 55%, oklch(0.24 0.04 272));
+
+  --primary: oklch(0.85 0.02 250);
+  --primary-foreground: oklch(0.26 0.03 258);
+  --secondary: oklch(0.68 0.05 235);
+  --secondary-foreground: oklch(0.22 0.025 258);
+  --muted: oklch(1 0 0 / 0.08);
+  --muted-foreground: oklch(0.78 0.015 250);
+  --accent: oklch(1 0 0 / 0.14);
+  --accent-foreground: oklch(0.95 0.008 250);
+
+  --destructive: oklch(0.64 0.15 22);
+  --destructive-foreground: oklch(0.98 0.005 250);
+  --destructive-subtle: oklch(0.64 0.15 22 / 0.2);
+  --success: oklch(0.72 0.14 150);
+  --success-foreground: oklch(0.22 0.025 258);
+  --success-subtle: oklch(0.72 0.14 150 / 0.18);
+  --warning: oklch(0.8 0.12 75);
+  --warning-foreground: oklch(0.22 0.025 258);
+  --warning-subtle: oklch(0.8 0.12 75 / 0.18);
+  --info: oklch(0.72 0.09 240);
+  --info-foreground: oklch(0.22 0.025 258);
+  --info-subtle: oklch(0.72 0.09 240 / 0.18);
+
+  --border: oklch(1 0 0 / 0.14);
+  --input: oklch(1 0 0 / 0.3);
+  --ring: oklch(0.8 0.04 250);
+  --scrim: oklch(0.2 0.03 260 / 0.45);
+  --scrim-foreground: oklch(1 0 0);
+
+  --shadow-color: oklch(0.12 0.02 260);
+  --shadow-strength: 0.5;
+}
+
+/* ── Blur placement ─────────────────────────────────────────────────────────
+   The surface-* utilities pick up --glass-backdrop by themselves; these rules
+   cover surfaces that (still) use raw color utilities:
+   - popovers/dropdowns (`bg-popover`) rendered over arbitrary content
+   - ad-hoc modal shells: a `bg-scrim` overlay with the dialog body as its
+     direct `bg-background`/`bg-card` child
+   - the scrim overlays themselves (`bg-scrim`), matching the `scrim` utility */
+
+[data-theme='frost'] .bg-popover,
+[data-theme='frost'] .bg-scrim > :is(.bg-background, .bg-card) {
+  -webkit-backdrop-filter: var(--glass-backdrop);
+  backdrop-filter: var(--glass-backdrop);
+}
+
+[data-theme='frost'] .bg-scrim {
+  -webkit-backdrop-filter: var(--glass-scrim-backdrop);
+  backdrop-filter: var(--glass-scrim-backdrop);
+}
+
+/* No backdrop-filter support (old WebViews): the blur can't carry legibility,
+   so the glass gets close to opaque instead. */
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  [data-theme='frost'][data-scheme='light'],
+  [data-theme='frost'] [data-scheme='light'] {
+    --background: oklch(0.985 0.003 250 / 0.94);
+    --card: oklch(0.985 0.003 250 / 0.94);
+    --popover: oklch(0.985 0.005 250 / 0.97);
+  }
+
+  [data-theme='frost'][data-scheme='dark'],
+  [data-theme='frost'] [data-scheme='dark'] {
+    --background: oklch(0.31 0.025 255 / 0.94);
+    --card: oklch(0.33 0.025 255 / 0.94);
+    --popover: oklch(0.3 0.028 255 / 0.97);
+  }
+}
+
+/* ═══ themes/halflife.css ═════════════════════════════════════════════════ */
+
+/**
+ * Half-Life — lambda orange on black steel.
+ *
+ * Tight palette: #fb7e14 / #000 / #151515 / #292929 / #fff. Square VGUI
+ * corners, Trebuchet (the HL2 menu face). The M0 rail is solid orange;
+ * everything else stays steel.
+ */
+
+[data-theme='halflife'] {
+  --radius: 0;
+
+  --font-family-sans: 'Trebuchet MS', Verdana, 'Segoe UI', sans-serif;
+
+  --btn-font-weight: 700;
+  --row-radius: 0;
+  --card-shadow: none;
+}
+
+/* ── Light ─────────────────────────────────────────────────────────────── */
+[data-theme='halflife'][data-scheme='light'],
+[data-theme='halflife'] [data-scheme='light'] {
+  color-scheme: light;
+
+  --background: oklch(1 0 0);
+  --foreground: oklch(0 0 0);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0 0 0);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0 0 0);
+  --desk: oklch(0.281 0 0);
+
+  --primary: oklch(0.724 0.181 52);
+  --primary-foreground: oklch(0 0 0);
+  --secondary: oklch(0.196 0 0);
+  --secondary-foreground: oklch(1 0 0);
+  --muted: oklch(0.281 0 0 / 0.1);
+  --muted-foreground: oklch(0.281 0 0);
+  --accent: oklch(0.724 0.181 52);
+  --accent-foreground: oklch(0 0 0);
+
+  --destructive: oklch(0.52 0.2 27);
+  --destructive-foreground: oklch(1 0 0);
+  --destructive-subtle: oklch(0.94 0.04 27);
+  --success: oklch(0.5 0.14 150);
+  --success-foreground: oklch(1 0 0);
+  --success-subtle: oklch(0.94 0.04 150);
+  --warning: oklch(0.724 0.181 52);
+  --warning-foreground: oklch(0 0 0);
+  --warning-subtle: oklch(0.94 0.06 52);
+  --info: oklch(0.5 0.15 250);
+  --info-foreground: oklch(1 0 0);
+  --info-subtle: oklch(0.94 0.03 250);
+
+  --border: oklch(0.281 0 0);
+  --input: oklch(0.281 0 0);
+  --ring: oklch(0.724 0.181 52);
+  --scrim: oklch(0 0 0 / 0.5);
+  --scrim-foreground: oklch(1 0 0);
+
+  --shadow-color: oklch(0 0 0);
+  --shadow-strength: 0.28;
+}
+
+/* ── Dark ──────────────────────────────────────────────────────────────── */
+[data-theme='halflife'][data-scheme='dark'],
+[data-theme='halflife'] [data-scheme='dark'] {
+  color-scheme: dark;
+
+  --background: oklch(0.196 0 0);
+  --foreground: oklch(1 0 0);
+  --card: oklch(0.196 0 0);
+  --card-foreground: oklch(1 0 0);
+  --popover: oklch(0.281 0 0);
+  --popover-foreground: oklch(1 0 0);
+  --desk: oklch(0 0 0);
+
+  --primary: oklch(0.724 0.181 52);
+  --primary-foreground: oklch(0 0 0);
+  --secondary: oklch(0.281 0 0);
+  --secondary-foreground: oklch(1 0 0);
+  --muted: oklch(0.281 0 0);
+  --muted-foreground: oklch(1 0 0 / 0.65);
+  --accent: oklch(0.724 0.181 52);
+  --accent-foreground: oklch(0 0 0);
+
+  --destructive: oklch(0.7 0.19 25);
+  --destructive-foreground: oklch(0 0 0);
+  --destructive-subtle: oklch(0.28 0.07 25);
+  --success: oklch(0.75 0.16 148);
+  --success-foreground: oklch(0 0 0);
+  --success-subtle: oklch(0.28 0.06 148);
+  --warning: oklch(0.724 0.181 52);
+  --warning-foreground: oklch(0 0 0);
+  --warning-subtle: oklch(0.28 0.06 52);
+  --info: oklch(0.72 0.12 235);
+  --info-foreground: oklch(0 0 0);
+  --info-subtle: oklch(0.28 0.06 235);
+
+  --border: oklch(0.281 0 0);
+  --input: oklch(0.281 0 0);
+  --ring: oklch(0.724 0.181 52);
+  --scrim: oklch(0 0 0 / 0.7);
+  --scrim-foreground: oklch(1 0 0);
+
+  --shadow-color: oklch(0 0 0);
+  --shadow-strength: 0.55;
+}
+
+/* M0 rail — solid lambda orange, black type. Nested token remap so icons
+   and the mobile overlay follow without component changes. */
+[data-theme='halflife'] [data-shell='rail'] {
+  background-color: #fb7e14;
+  background-color: oklch(0.724 0.181 52);
+  color: #000;
+  color: oklch(0 0 0);
+
+  --background: oklch(0.724 0.181 52);
+  --foreground: oklch(0 0 0);
+  --card: oklch(0.724 0.181 52);
+  --card-foreground: oklch(0 0 0);
+  --muted: oklch(0 0 0 / 0.12);
+  --muted-foreground: oklch(0 0 0);
+  --accent: oklch(0 0 0);
+  --accent-foreground: oklch(0.724 0.181 52);
+  --primary: oklch(0 0 0);
+  --primary-foreground: oklch(0.724 0.181 52);
+  --secondary: oklch(0.196 0 0);
+  --secondary-foreground: oklch(0.724 0.181 52);
+  --border: oklch(0 0 0 / 0.35);
+  --input: oklch(0 0 0 / 0.55);
+  --ring: oklch(0 0 0);
+  --popover: oklch(0 0 0);
+  --popover-foreground: oklch(0.724 0.181 52);
+  /* Light red on lambda orange is the same colour. Ink-red instead. */
+  --destructive: oklch(0.32 0.18 18);
+}
+
+/* Selected rows are black bars; force orange type even when the component
+   pairs bg-accent with text-foreground (which is also black on this panel). */
+[data-theme='halflife'] [data-shell='rail'] .bg-accent {
+  color: #fb7e14;
+  color: oklch(0.724 0.181 52);
 }
 
 /* ═══ density.css ═════════════════════════════════════════════════════════ */
@@ -1570,16 +1900,27 @@
 
 /* ── Surfaces ──────────────────────────────────────────────────────────── */
 
-/* The desk: the neutral backdrop that sheets rest on. */
+/* The desk: the neutral backdrop that sheets rest on. An optional global
+   wallpaper (Settings > Appearance) rides on top of the theme color via
+   CSS vars set by lib/wallpaper.ts — no image, no change. */
 
 
-/* A sheet of paper: the main content area and full-height panels. */
+/* A sheet of paper: the main content area and full-height panels.
+   --glass-backdrop is unset everywhere except glass themes (frost), where the
+   card color is translucent and the sheet blurs what's behind it. */
 
 
 /* A docked or floating panel — drawers, side panels, the toolbox. */
 
 
 /* Same panel, promoted over a scrim (mobile drawers). */
+
+
+/* Opt a top-level container (menu panel, toolbox, modal body) into the glass
+   material. Inert in themes that don't set --glass-backdrop; carries no
+   background of its own — pair with bg-card / bg-background. Only for
+   surfaces sitting directly on the desk or an overlay: nested inside another
+   glass surface it costs a GPU layer and changes nothing. */
 
 
 /* An interactive card that lifts on hover. */
@@ -1607,6 +1948,20 @@
  */
 
 
+/**
+ * A tile caption that yields to the picture on a mouse and stays put on a
+ * finger.
+ *
+ * `hover: hover` rather than a Tailwind `hover:` variant, because the two
+ * states have OPPOSITE defaults: a touch device has no gesture that could
+ * reveal a caption without also opening the image, so hiding it there would
+ * hide it forever. Mouse users get the clean photo wall and the caption on
+ * hover; touch users get the caption.
+ *
+ * Requires a `.group` ancestor (the tile).
+ */
+
+
 /* The one true focus treatment. `:focus-visible` only, so pointer users never
    see it but keyboard users always do. */
 
@@ -1623,6 +1978,19 @@
 
 /* Marks a region as the window drag handle for a custom titlebar. Inert in a
    browser; Tauri reads the data attribute these compile to. */
+
+
+
+
+/* ── Progressive disclosure that survives touch ─────────────────────────── */
+
+/* Row actions that fade in on hover. Keyed on POINTER CAPABILITY, not viewport
+   width: a touch device has no hover state at all, so a control that only
+   appears on :hover is simply unreachable there — while a narrow window with a
+   mouse should still get the quiet treatment. Pair with `group` on the row.
+
+   Replaces the hand-rolled `opacity-0 group-hover:opacity-100`, which was
+   invisible on every phone and tablet. */
 
 /* ═══ fallback.css ════════════════════════════════════════════════════════ */
 
@@ -2042,6 +2410,185 @@
     --scrim: rgba(1, 2, 1, 0.7);
     --scrim-foreground: #ffffff;
     --shadow-color: #000000;
+  }
+
+  [data-theme='frost'][data-scheme='light'], [data-theme='frost'] [data-scheme='light'] {
+    --background: rgba(249, 250, 252, 0.55);
+    --foreground: #222933;
+    --card: rgba(249, 250, 252, 0.6);
+    --card-foreground: #222933;
+    --popover: rgba(248, 250, 253, 0.82);
+    --native-popup: #f8fafd;
+    --popover-foreground: #222933;
+    --desk: #e1e5ea;
+    --primary: #44576e;
+    --primary-foreground: #f9fafc;
+    --secondary: #5e879b;
+    --secondary-foreground: #f9fafc;
+    --muted: rgba(78, 86, 97, 0.1);
+    --muted-foreground: #4b535e;
+    --accent: rgba(255, 255, 255, 0.55);
+    --accent-foreground: #222933;
+    --destructive: #b84d4e;
+    --destructive-foreground: #f9fafc;
+    --destructive-subtle: rgba(205, 95, 95, 0.14);
+    --success: #4a9a5e;
+    --success-foreground: #f9fafc;
+    --success-subtle: rgba(74, 154, 94, 0.14);
+    --warning: #d49648;
+    --warning-foreground: #222933;
+    --warning-subtle: rgba(212, 150, 72, 0.16);
+    --info: #4a87b1;
+    --info-foreground: #f9fafc;
+    --info-subtle: rgba(74, 135, 177, 0.14);
+    --border: rgba(255, 255, 255, 0.55);
+    --input: rgba(65, 72, 83, 0.35);
+    --ring: #5b748e;
+    --scrim: rgba(39, 46, 56, 0.25);
+    --scrim-foreground: #ffffff;
+    --shadow-color: #303b4a;
+  }
+
+  [data-theme='frost'][data-scheme='dark'], [data-theme='frost'] [data-scheme='dark'] {
+    --background: rgba(40, 49, 61, 0.5);
+    --foreground: #ebeff4;
+    --card: rgba(45, 54, 66, 0.52);
+    --card-foreground: #ebeff4;
+    --popover: rgba(36, 47, 60, 0.85);
+    --popover-foreground: #ebeff4;
+    --native-popup: #242f3c;
+    --desk: #1c2430;
+    --primary: #c4cfdb;
+    --primary-foreground: #1b2433;
+    --secondary: #7b9eb3;
+    --secondary-foreground: #131b26;
+    --muted: rgba(255, 255, 255, 0.08);
+    --muted-foreground: #b0b8c1;
+    --accent: rgba(255, 255, 255, 0.14);
+    --accent-foreground: #ebeff4;
+    --destructive: #d86162;
+    --destructive-foreground: #f6f9fc;
+    --destructive-subtle: rgba(216, 97, 98, 0.2);
+    --success: #5bbd74;
+    --success-foreground: #131b26;
+    --success-subtle: rgba(91, 189, 116, 0.18);
+    --warning: #ebb25f;
+    --warning-foreground: #131b26;
+    --warning-subtle: rgba(235, 178, 95, 0.18);
+    --info: #6eacd7;
+    --info-foreground: #131b26;
+    --info-subtle: rgba(110, 172, 215, 0.18);
+    --border: rgba(255, 255, 255, 0.14);
+    --input: rgba(255, 255, 255, 0.3);
+    --ring: #abc0d7;
+    --scrim: rgba(14, 22, 36, 0.45);
+    --scrim-foreground: #ffffff;
+    --shadow-color: #03060d;
+  }
+
+  [data-theme='frost'][data-scheme='light'], [data-theme='frost'] [data-scheme='light'] {
+    --background: rgba(249, 250, 252, 0.94);
+    --card: rgba(249, 250, 252, 0.94);
+    --popover: rgba(248, 250, 253, 0.97);
+  }
+
+  [data-theme='frost'][data-scheme='dark'], [data-theme='frost'] [data-scheme='dark'] {
+    --background: rgba(40, 49, 61, 0.94);
+    --card: rgba(45, 54, 66, 0.94);
+    --popover: rgba(36, 47, 60, 0.97);
+  }
+
+  [data-theme='halflife'][data-scheme='light'], [data-theme='halflife'] [data-scheme='light'] {
+    --background: #ffffff;
+    --foreground: #000000;
+    --card: #ffffff;
+    --card-foreground: #000000;
+    --popover: #ffffff;
+    --popover-foreground: #000000;
+    --desk: #292929;
+    --primary: #fb7e15;
+    --primary-foreground: #000000;
+    --secondary: #151515;
+    --secondary-foreground: #ffffff;
+    --muted: rgba(41, 41, 41, 0.1);
+    --muted-foreground: #292929;
+    --accent: #fb7e15;
+    --accent-foreground: #000000;
+    --destructive: #c2181d;
+    --destructive-foreground: #ffffff;
+    --destructive-subtle: #ffe2dd;
+    --success: #007834;
+    --success-foreground: #ffffff;
+    --success-subtle: #d9f3dd;
+    --warning: #fb7e15;
+    --warning-foreground: #000000;
+    --warning-subtle: #ffe1c7;
+    --info: #0065b4;
+    --info-foreground: #ffffff;
+    --info-subtle: #ddedff;
+    --border: #292929;
+    --input: #292929;
+    --ring: #fb7e15;
+    --scrim: rgba(0, 0, 0, 0.5);
+    --scrim-foreground: #ffffff;
+    --shadow-color: #000000;
+  }
+
+  [data-theme='halflife'][data-scheme='dark'], [data-theme='halflife'] [data-scheme='dark'] {
+    --background: #151515;
+    --foreground: #ffffff;
+    --card: #151515;
+    --card-foreground: #ffffff;
+    --popover: #292929;
+    --popover-foreground: #ffffff;
+    --desk: #000000;
+    --primary: #fb7e15;
+    --primary-foreground: #000000;
+    --secondary: #292929;
+    --secondary-foreground: #ffffff;
+    --muted: #292929;
+    --muted-foreground: rgba(255, 255, 255, 0.65);
+    --accent: #fb7e15;
+    --accent-foreground: #000000;
+    --destructive: #ff645f;
+    --destructive-foreground: #000000;
+    --destructive-subtle: #451816;
+    --success: #5bc971;
+    --success-foreground: #000000;
+    --success-subtle: #113117;
+    --warning: #fb7e15;
+    --warning-foreground: #000000;
+    --warning-subtle: #3f1f09;
+    --info: #4cb0e5;
+    --info-foreground: #000000;
+    --info-subtle: #002d42;
+    --border: #292929;
+    --input: #292929;
+    --ring: #fb7e15;
+    --scrim: rgba(0, 0, 0, 0.7);
+    --scrim-foreground: #ffffff;
+    --shadow-color: #000000;
+  }
+
+  [data-theme='halflife'] [data-shell='rail'] {
+    --background: #fb7e15;
+    --foreground: #000000;
+    --card: #fb7e15;
+    --card-foreground: #000000;
+    --muted: rgba(0, 0, 0, 0.12);
+    --muted-foreground: #000000;
+    --accent: #000000;
+    --accent-foreground: #fb7e15;
+    --primary: #000000;
+    --primary-foreground: #fb7e15;
+    --secondary: #151515;
+    --secondary-foreground: #fb7e15;
+    --border: rgba(0, 0, 0, 0.35);
+    --input: rgba(0, 0, 0, 0.55);
+    --ring: #000000;
+    --popover: #000000;
+    --popover-foreground: #fb7e15;
+    --destructive: #740009;
   }
 
   :root {

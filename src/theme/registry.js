@@ -40,6 +40,12 @@ export const THEMES = [
     name: 'Terminal',
     description: 'Monospaced and dense. Tighter rows and chrome.',
     swatches: ['oklch(0.17 0.006 152)', 'oklch(0.8 0.19 148)', 'oklch(0.75 0.12 220)']
+  },
+  {
+    id: 'halflife',
+    name: 'Half-Life',
+    description: 'Lambda orange on black steel. Square corners.',
+    swatches: ['oklch(0.724 0.181 52)', 'oklch(0 0 0)', 'oklch(1 0 0)']
   }
 ];
 
