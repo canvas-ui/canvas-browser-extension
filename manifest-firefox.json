@@ -8,7 +8,6 @@
     "tabs",
     "storage",
     "notifications",
-    "tabHide",
     "alarms"
   ],
 
@@ -64,6 +63,9 @@
     "gecko": {
       "id": "canvas-browser-extension@getcanvas.org",
       "strict_min_version": "109.0"
+    },
+    "gecko_android": {
+      "strict_min_version": "128.0"
     }
   }
 }

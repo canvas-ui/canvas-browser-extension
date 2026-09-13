@@ -582,9 +582,14 @@ async function checkInitialConnection() {
   }
 }
 
-async function handleTestConnection() {
+async function handleTestConnection(event) {
   try {
     setButtonLoading(testConnectionBtn, true);
+
+    if (event?.isTrusted && !(await ensureServerOriginPermission(serverUrl.value.trim()))) {
+      showToast('Firefox blocked access to this server. Grant the host permission and try again.', 'error');
+      return;
+    }
 
     // In credentials mode, only do a fresh login if email+password are entered.
     // Otherwise fall back to the stored JWT (e.g. on initial connection check at startup).
@@ -648,6 +653,12 @@ async function handleConnect() {
 
     // Validate form
     if (!validateConnectionForm()) {
+      setButtonLoading(connectBtn, false);
+      return;
+    }
+
+    if (!(await ensureServerOriginPermission(serverUrl.value.trim()))) {
+      showToast('Firefox blocked access to this server. Grant the host permission and try again.', 'error');
       setButtonLoading(connectBtn, false);
       return;
     }
@@ -1334,6 +1345,31 @@ function setupStorageListeners() {
     });
   } else {
     console.warn('Settings: Chrome storage API not available');
+  }
+}
+
+// Firefox treats host_permissions as optional. Desktop users usually grant
+// them at install; Android has no Add-ons Manager UI to grant them later
+// (bugs 1812125 / 1820867), so Connect has to request the server origin from
+// this click. Without it, fetch is a normal CORS call from moz-extension://
+// and a remote canvas-server that doesn't echo that origin just dies.
+async function ensureServerOriginPermission(serverUrlValue) {
+  let origin;
+  try {
+    origin = `${new URL(serverUrlValue).origin}/*`;
+  } catch {
+    return false;
+  }
+  const api = (typeof browser !== 'undefined' && browser.permissions)
+    ? browser.permissions
+    : (typeof chrome !== 'undefined' ? chrome.permissions : null);
+  if (!api?.contains || !api?.request) return true;
+  try {
+    if (await api.contains({ origins: [origin] })) return true;
+    return await api.request({ origins: [origin] });
+  } catch (err) {
+    console.warn('Host permission request failed:', err);
+    return false;
   }
 }
 

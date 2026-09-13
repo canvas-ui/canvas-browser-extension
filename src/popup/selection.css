@@ -6,8 +6,6 @@
  */
 
 .selection-header {
-  background: var(--muted);
-  border-bottom: 1px solid var(--border);
   padding: 12px 16px;
 }
 

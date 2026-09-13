@@ -41,6 +41,21 @@ body {
   z-index: var(--z-layer-sticky);
 }
 
+[data-theme='halflife'] .header {
+  background-color: #fb7e14;
+  background-color: oklch(0.724 0.181 52);
+  color: #000;
+  border-bottom-color: oklch(0 0 0 / 0.35);
+
+  --foreground: oklch(0 0 0);
+  --muted: oklch(0 0 0 / 0.12);
+  --muted-foreground: oklch(0 0 0);
+  --accent: oklch(0 0 0 / 0.12);
+  --accent-foreground: oklch(0 0 0);
+  --card: oklch(0.724 0.181 52);
+  --card-foreground: oklch(0 0 0);
+}
+
 .header-content {
   display: flex;
   align-items: center;

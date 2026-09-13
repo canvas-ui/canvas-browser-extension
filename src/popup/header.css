@@ -360,3 +360,30 @@ body.disconnected .disconnected-badge {
 .add-page-btn.ready .add-page-label {
   display: inline;
 }
+
+/* Half-Life: the popup header is this app's M0 rail — solid lambda orange,
+   black type. Disconnected still paints the bar destructive so the failure
+   state stays obvious. */
+[data-theme='halflife'] .header {
+  background-color: #fb7e14;
+  background-color: oklch(0.724 0.181 52);
+  color: #000;
+  border-bottom-color: oklch(0 0 0 / 0.35);
+
+  --foreground: oklch(0 0 0);
+  --muted: oklch(0 0 0 / 0.12);
+  --muted-foreground: oklch(0 0 0);
+  --accent: oklch(0 0 0 / 0.12);
+  --accent-foreground: oklch(0 0 0);
+  --destructive: oklch(0.32 0.18 18);
+  --destructive-foreground: oklch(1 0 0);
+}
+
+[data-theme='halflife'] .header .context-url {
+  color: inherit;
+}
+
+body.disconnected .header {
+  background: var(--destructive);
+  border-bottom-color: color-mix(in oklab, var(--destructive) 70%, var(--foreground));
+}
