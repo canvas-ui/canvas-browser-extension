@@ -175,6 +175,7 @@
 /* ── Action buttons ─────────────────────────────────────────────────────── */
 
 .bulk-actions {
+  flex-wrap: wrap;
   display: flex;
   gap: 8px;
   padding: 12px;

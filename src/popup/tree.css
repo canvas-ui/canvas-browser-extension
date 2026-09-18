@@ -35,6 +35,7 @@
 }
 
 .tree-path-input-container {
+  min-width: 0;
   display: flex;
   align-items: center;
   gap: 6px;
@@ -43,6 +44,7 @@
 }
 
 .tree-path-input {
+  min-width: 0;
   flex: 1;
   padding: 6px 10px;
   border: var(--input-border-width) solid var(--input);
@@ -62,6 +64,7 @@
 
 .path-submit-btn,
 .path-cancel-btn {
+  flex-shrink: 0;
   width: 28px;
   height: 28px;
   border: none;

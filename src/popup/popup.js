@@ -736,6 +736,10 @@ function updateConnectionStatus(connection) {
     contextUrl.textContent = 'No context';
     contextUrl.classList.remove('clickable');
   }
+
+  connectionText.title = connectionText.textContent;
+  contextId.title = contextId.textContent;
+  contextUrl.title = contextUrl.textContent;
 }
 
 // Filter out internal browser tabs that should never be shown or interacted with
@@ -2797,8 +2801,10 @@ async function handlePathSubmit() {
 
         if (workspaceName) {
           contextUrl.textContent = formatContextUrl(workspaceName, pathToSend);
+          contextUrl.title = contextUrl.textContent;
         } else {
           contextUrl.textContent = pathToSend;
+          contextUrl.title = contextUrl.textContent;
         }
 
         currentWorkspacePath = pathToSend; // Update for display consistency
@@ -2841,6 +2847,7 @@ async function handlePathSubmit() {
       // Update display with properly formatted URL
       const wsName = getWorkspaceName(currentConnection.workspace);
       contextUrl.textContent = formatContextUrl(wsName, pathToSend);
+      contextUrl.title = contextUrl.textContent;
 
       // Persist the workspace path
       await sendMessageToBackground('SET_MODE_AND_SELECTION', {

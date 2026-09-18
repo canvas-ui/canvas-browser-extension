@@ -1,11 +1,8 @@
 /**
  * Popup — search bar, tab navigation and the main column.
  *
- * The search row and the tab bar are sticky beneath the header. All three
- * z-indexes derive from `--z-layer-sticky` so their ordering is stated once
- * rather than as three literals that have to be kept in descending order by
- * hand. The `top` offsets stay literal — they are the measured heights of the
- * rows above, not a design token.
+ * Header, search and navigation stay in normal flow above the scrolling main
+ * column, so their positions follow each theme's font and border sizes.
  */
 
 .search-section {
@@ -13,8 +10,6 @@
   border-bottom: 1px solid var(--border);
   background: var(--background);
   flex-shrink: 0;
-  position: sticky;
-  top: 62px;
   z-index: calc(var(--z-layer-sticky) - 1);
 }
 
@@ -42,8 +37,6 @@
   background: var(--muted);
   border-bottom: 1px solid var(--border);
   flex-shrink: 0;
-  position: sticky;
-  top: 114px;
   z-index: calc(var(--z-layer-sticky) - 2);
 }
 
@@ -99,6 +92,7 @@
 /* ── Main column ────────────────────────────────────────────────────────── */
 
 .main {
+  min-height: 0;
   flex: 1;
   display: flex;
   flex-direction: column;
@@ -131,6 +125,7 @@
   margin: 0;
   width: 16px;
   height: 16px;
+  flex-shrink: 0;
   accent-color: var(--info);
 }
 
@@ -147,6 +142,8 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
   margin-bottom: 12px;
   padding-bottom: 8px;
   border-bottom: 1px solid var(--border);
@@ -154,6 +151,8 @@
 }
 
 .section-header-left {
+  flex: 1;
+  min-width: 0;
   display: flex;
   align-items: center;
   gap: 8px;
@@ -164,9 +163,11 @@
   font-weight: 600;
   color: var(--foreground);
   margin: 0;
+  overflow-wrap: anywhere;
 }
 
 .select-all-label {
+  flex-shrink: 0;
   margin: 0;
   padding: 0;
   display: flex;
@@ -181,10 +182,11 @@
 }
 
 .select-all-label .checkmark {
-  margin: 0;
+  display: none;
 }
 
 .section-actions {
+  flex-shrink: 0;
   display: flex;
   gap: 8px;
   align-items: center;
