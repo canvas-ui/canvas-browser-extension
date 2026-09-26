@@ -76,7 +76,6 @@ export class CanvasApiClient {
     this.userToken = null;
     this.connected = false;
     this.appKey = 'canvas-extension';
-    this.startedWorkspaces = new Set();
     this._http = null;
   }
 
@@ -112,16 +111,12 @@ export class CanvasApiClient {
   // Initialize client with connection settings
   initialize(serverUrl, apiBasePath, apiToken) {
     const normalizedBaseUrl = serverUrl.replace(/\/$/, '');
-    const connectionChanged = this.baseUrl !== normalizedBaseUrl || this.userToken !== apiToken;
     const transportChanged = this.baseUrl !== normalizedBaseUrl || this.apiBasePath !== apiBasePath;
 
     this.baseUrl = normalizedBaseUrl; // Remove trailing slash
     this.apiBasePath = apiBasePath;
     this.userToken = apiToken;
 
-    if (connectionChanged) {
-      this.startedWorkspaces.clear();
-    }
     if (transportChanged) {
       this._http = null; // rebuilt lazily with the new base
     }
@@ -188,14 +183,6 @@ This is a Firefox security feature, not an extension bug.
       console.error(`API Error: ${method} ${path}`, error);
       throw error;
     }
-  }
-
-  async ensureWorkspaceStarted(workspaceNameOrId) {
-    const workspaceKey = encodeURIComponent(workspaceNameOrId);
-    if (this.startedWorkspaces.has(workspaceKey)) return;
-
-    await this._req('POST', routes.workspaces.start(workspaceKey), { data: {} });
-    this.startedWorkspaces.add(workspaceKey);
   }
 
   // Test connection to server
@@ -537,7 +524,6 @@ Firefox blocks local network requests for security reasons.
 
   // Workspace tree
   async getWorkspaceTree(workspaceNameOrId, treeNameOrTreeId = DEFAULT_WORKSPACE_TREE_NAME) {
-    await this.ensureWorkspaceStarted(workspaceNameOrId);
     const tree = treeNameOrTreeId || DEFAULT_WORKSPACE_TREE_NAME;
     return await this._req(
       'GET',
@@ -546,7 +532,6 @@ Firefox blocks local network requests for security reasons.
   }
 
   async getWorkspaceDocuments(workspaceNameOrId, contextSpec = '/', featureArray = [], options = {}) {
-    await this.ensureWorkspaceStarted(workspaceNameOrId);
     const enhancedFeatureArray = [...featureArray];
     if (!enhancedFeatureArray.includes('data/schema/tab')) {
       enhancedFeatureArray.unshift('data/schema/tab');
@@ -579,14 +564,12 @@ Firefox blocks local network requests for security reasons.
   }
 
   async insertWorkspaceDocument(workspaceNameOrId, document, contextSpec = '/', featureArray = [], treeNameOrTreeId = DEFAULT_WORKSPACE_TREE_NAME) {
-    await this.ensureWorkspaceStarted(workspaceNameOrId);
     return await this._req('POST', routes.workspaces.documents(encodeURIComponent(workspaceNameOrId)), {
       data: this._workspaceDocumentsBody([document], contextSpec, featureArray, treeNameOrTreeId)
     });
   }
 
   async insertWorkspaceDocuments(workspaceNameOrId, documents, contextSpec = '/', featureArray = [], treeNameOrTreeId = DEFAULT_WORKSPACE_TREE_NAME) {
-    await this.ensureWorkspaceStarted(workspaceNameOrId);
     return await this._req('POST', routes.workspaces.documents(encodeURIComponent(workspaceNameOrId)), {
       data: this._workspaceDocumentsBody(documents, contextSpec, featureArray, treeNameOrTreeId)
     });
@@ -603,7 +586,6 @@ Firefox blocks local network requests for security reasons.
   }
 
   async removeWorkspaceDocuments(workspaceNameOrId, documentIds, contextSpec = '/', featureArray = [], treeNameOrTreeId = DEFAULT_WORKSPACE_TREE_NAME) {
-    await this.ensureWorkspaceStarted(workspaceNameOrId);
     return await this._req('DELETE', routes.workspaces.documentsRemove(encodeURIComponent(workspaceNameOrId)), {
       params: this._workspaceDocumentsParams(contextSpec, featureArray, treeNameOrTreeId),
       data: this.normalizeDocumentIds(documentIds),
@@ -612,7 +594,6 @@ Firefox blocks local network requests for security reasons.
   }
 
   async deleteWorkspaceDocuments(workspaceNameOrId, documentIds, contextSpec = '/', featureArray = [], treeNameOrTreeId = DEFAULT_WORKSPACE_TREE_NAME) {
-    await this.ensureWorkspaceStarted(workspaceNameOrId);
     return await this._req('DELETE', routes.workspaces.documents(encodeURIComponent(workspaceNameOrId)), {
       params: this._workspaceDocumentsParams(contextSpec, featureArray, treeNameOrTreeId),
       data: this.normalizeDocumentIds(documentIds),
@@ -624,7 +605,6 @@ Firefox blocks local network requests for security reasons.
   // Insert is PUT .../trees/{tree}/path/{encodedPath} — the path is the URL splat
   // (not a body field), matching the web UI and the `PUT /path/*` route.
   async insertWorkspacePath(workspaceNameOrId, path, data = null, autoCreateLayers = true, treeNameOrTreeId = DEFAULT_WORKSPACE_TREE_NAME) {
-    await this.ensureWorkspaceStarted(workspaceNameOrId);
     const encodedPath = String(path || '/').split('/').filter(Boolean).map(encodeURIComponent).join('/');
     const body = { autoCreateLayers };
     if (data && typeof data === 'object') Object.assign(body, data);

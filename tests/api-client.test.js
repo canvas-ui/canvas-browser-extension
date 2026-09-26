@@ -2,8 +2,7 @@
 // (envelope mode) to the extension's historical contract. These tests pin the
 // contract pieces the background scripts depend on: full envelopes coming
 // back (sync-engine reads .status/.payload itself), the exact insert/remove
-// wire shapes, AuthExpiredError on 401/403, the started-workspace preflight
-// cache, and live token pickup after service-worker assigns userToken.
+// wire shapes, AuthExpiredError on 401/403, explicit workspace startup, and live token pickup after service-worker assigns userToken.
 
 import { strict as assert } from 'node:assert';
 import test, { before, beforeEach } from 'node:test';
@@ -48,7 +47,6 @@ beforeEach(() => {
   calls.length = 0;
   responder = () => envelopeResponse([]);
   apiClient.initialize('http://127.0.0.1:8001/', '/rest/v2', 'tok-ext');
-  apiClient.startedWorkspaces.clear();
 });
 
 test('returns whole envelopes (sync-engine digs .payload itself) and sends the historical headers', async () => {
@@ -69,11 +67,9 @@ test('insertWorkspaceDocuments: body shape and encoded workspace id', async () =
   const doc = { schema: 'data/schema/tab', data: { url: 'https://x' }, featureArray: ['data/schema/tab'] };
   await apiClient.insertWorkspaceDocuments('my ws', [doc], '/inbox', ['data/schema/tab', 'tag/dev'], 'context');
 
-  // preflight start + insert
-  assert.equal(calls.length, 2);
-  assert.equal(calls[0].url, 'http://127.0.0.1:8001/rest/v2/workspaces/my%20ws/start');
-  assert.equal(calls[1].url, 'http://127.0.0.1:8001/rest/v2/workspaces/my%20ws/documents');
-  assert.deepEqual(JSON.parse(calls[1].init.body), {
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].url, 'http://127.0.0.1:8001/rest/v2/workspaces/my%20ws/documents');
+  assert.deepEqual(JSON.parse(calls[0].init.body), {
     treeNameOrTreeId: 'context',
     treeType: 'context',
     context: '/inbox',
@@ -85,7 +81,7 @@ test('insertWorkspaceDocuments: body shape and encoded workspace id', async () =
 test('removeWorkspaceDocuments: DELETE with query filters and numeric-id JSON body', async () => {
   await apiClient.removeWorkspaceDocuments('ws1', ['12', 34], '/', ['data/schema/tab'], 'context');
 
-  const del = calls[1];
+  const del = calls[0];
   const url = new URL(del.url);
   assert.equal(url.pathname, '/rest/v2/workspaces/ws1/documents/remove');
   assert.equal(url.searchParams.get('treeNameOrTreeId'), 'context');
@@ -96,15 +92,15 @@ test('removeWorkspaceDocuments: DELETE with query filters and numeric-id JSON bo
   assert.equal(del.init.headers['Content-Type'], 'application/json');
 });
 
-test('ensureWorkspaceStarted caches per connection', async () => {
+test('reads never start workspaces, including after a connection change', async () => {
   await apiClient.getWorkspaceDocuments('ws1');
   await apiClient.getWorkspaceDocuments('ws1');
   const starts = calls.filter((c) => c.url.endsWith('/start'));
-  assert.equal(starts.length, 1);
-  // connection change clears the memo
+  assert.equal(starts.length, 0);
+  // Reconnecting does not grant permission to start a stopped workspace.
   apiClient.initialize('http://127.0.0.1:8001', '/rest/v2', 'other-token');
   await apiClient.getWorkspaceDocuments('ws1');
-  assert.equal(calls.filter((c) => c.url.endsWith('/start')).length, 2);
+  assert.equal(calls.filter((c) => c.url.endsWith('/start')).length, 0);
 });
 
 test('HTTP 401 maps to AuthExpiredError; error envelopes throw with the server message', async () => {

@@ -263,13 +263,6 @@ async function initializeWebSocket() {
     // Initialize sync engine
     await syncEngine.initialize();
 
-    if (mode === 'explorer' && currentWorkspace) {
-      const wsId = currentWorkspace.id || currentWorkspace.name;
-      if (wsId) {
-        await apiClient.ensureWorkspaceStarted(wsId);
-      }
-    }
-
     // Connect to WebSocket
     const success = await webSocketClient.connect(
       connectionSettings.serverUrl,
@@ -1631,13 +1624,6 @@ async function handleSetModeAndSelection(data, sendResponse) {
           connectionSettings.apiBasePath,
           connectionSettings.apiToken
         );
-      }
-
-      if (mode === 'explorer' && workspace) {
-        const wsId = workspace.id || workspace.name;
-        if (wsId) {
-          await apiClient.ensureWorkspaceStarted(wsId);
-        }
       }
 
       await initializeWebSocket();
