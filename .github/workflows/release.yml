@@ -1,0 +1,62 @@
+name: release
+
+# On every push to main: when the version has no v<version> Release yet, build
+# both packages and create the Release with them. An unbumped push does
+# nothing. Release = `pnpm run release patch` (keeps package.json and both
+# manifests in step) — store submissions stay a separate, manual step: these
+# zips are the exact artifacts uploaded there.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - id: v
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          v=$(node -p "require('./package.json').version")
+          for f in manifest-chromium.json manifest-firefox.json; do
+            m=$(node -p "require('./$f').version"); [ "$v" = "$m" ] || { echo "$f is $m, package.json is $v"; exit 1; }
+          done
+          echo "version=$v" >> "$GITHUB_OUTPUT"
+          if gh release view "v$v" >/dev/null 2>&1; then echo "new=false" >> "$GITHUB_OUTPUT"; else echo "new=true" >> "$GITHUB_OUTPUT"; fi
+      - uses: pnpm/action-setup@v4
+        if: steps.v.outputs.new == 'true'
+      - uses: actions/setup-node@v4
+        if: steps.v.outputs.new == 'true'
+        with:
+          node-version: 22
+          cache: pnpm
+      - if: steps.v.outputs.new == 'true'
+        run: pnpm install --frozen-lockfile && pnpm run build
+      - name: Verify packages
+        if: steps.v.outputs.new == 'true'
+        working-directory: packages
+        run: |
+          for z in canvas-extension-chromium.zip canvas-extension-firefox.zip; do
+            [ -f "$z" ] || { echo "build produced no $z"; exit 1; }
+            unzip -tq "$z" || { echo "$z is not a valid zip"; exit 1; }
+          done
+          sha256sum canvas-extension-*.zip > SHA256SUMS
+      - name: GitHub Release
+        if: steps.v.outputs.new == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VER: ${{ steps.v.outputs.version }}
+        run: |
+          gh release create "v$VER" --target "$GITHUB_SHA" --title "canvas-browser-extension v$VER" \
+            --notes "Chromium (Chrome, Edge, Brave, Opera) and Firefox packages. Store submissions are a separate, manually approved step — these zips are the exact artifacts uploaded there." \
+            packages/canvas-extension-chromium.zip packages/canvas-extension-firefox.zip packages/SHA256SUMS

@@ -11,7 +11,8 @@
     "test": "node --test \"tests/**/*.test.js\"",
     "lint": "eslint src/ --ext .js,.mjs",
     "lint:fix": "eslint src/ --ext .js,.mjs --fix",
-    "smoke": "node scripts/smoke.mjs"
+    "smoke": "node scripts/smoke.mjs",
+    "release": "bash scripts/release.sh"
   },
   "keywords": [
     "browser-extension",
@@ -32,13 +33,18 @@
     "rimraf": "^6.1.3"
   },
   "dependencies": {
-    "@augmentd-labs/canvas-api-client": "workspace:*",
-    "@augmentd-labs/canvas-protocol": "workspace:*",
-    "@augmentd-labs/canvas-schemas": "workspace:*",
+    "@augmentd-labs/canvas-api-client": "^0.3.0",
+    "@augmentd-labs/canvas-protocol": "^0.4.0",
+    "@augmentd-labs/canvas-schemas": "^0.2.0",
     "iconify-icon": "^3.0.2",
     "socket.io-client": "^4.8.3"
   },
   "engines": {
     "node": ">=20.0.0"
+  },
+  "packageManager": "pnpm@10.32.1",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/canvas-ui/canvas-browser-extension.git"
   }
 }

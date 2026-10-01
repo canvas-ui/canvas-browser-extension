@@ -64,8 +64,8 @@ usually ahead of the store listings — store submissions happen in batches (see
 
 | Browser | Download |
 |---------|----------|
-| **Chromium-based** (Chrome, Edge, Brave, Opera) | [📦 canvas-extension-chromium.zip](https://github.com/canvas-ui/canvas/releases/latest) |
-| **Firefox** | [📦 canvas-extension-firefox.zip](https://github.com/canvas-ui/canvas/releases/latest) |
+| **Chromium-based** (Chrome, Edge, Brave, Opera) | [📦 canvas-extension-chromium.zip](https://github.com/canvas-ui/canvas-browser-extension/releases/latest) |
+| **Firefox** | [📦 canvas-extension-firefox.zip](https://github.com/canvas-ui/canvas-browser-extension/releases/latest) |
 
 Releases also ship `SHA256SUMS`; verify with
 `sha256sum -c SHA256SUMS --ignore-missing`.

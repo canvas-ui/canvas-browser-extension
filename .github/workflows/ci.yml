@@ -1,0 +1,28 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  build-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # No version input: pnpm/action-setup reads the packageManager field.
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm run lint
+      - run: pnpm run test
+      - run: pnpm run build
+      - name: Versions agree (package.json + both manifests)
+        run: |
+          v=$(node -p "require('./package.json').version")
+          for f in manifest-chromium.json manifest-firefox.json; do
+            m=$(node -p "require('./$f').version"); [ "$v" = "$m" ] || { echo "$f is $m, package.json is $v"; exit 1; }
+          done

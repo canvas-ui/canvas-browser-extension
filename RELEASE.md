@@ -6,42 +6,33 @@ Two separate things, on two different cadences:
 2. **The store submissions** — manual, occasional, done by a human when a
    version is worth shipping to users.
 
-Don't confuse them. Tagging a version does *not* put it in front of users.
+Don't confuse them. Releasing a version does *not* put it in front of users.
 
 ## 1. GitHub release
 
-From the stack root:
-
 ```bash
-./canvas-release.sh --apps extension --bump patch
+pnpm run release patch     # or minor / major; --dry-run prints the plan
 ```
 
-From the monorepo root:
-
-```bash
-npm run release:extension -- --bump patch     # or minor / major
-```
+(or from the stack root: `./canvas-release.sh --apps extension`)
 
 That bumps the version in **all three** files (`package.json`,
-`manifest-chromium.json`, `manifest-firefox.json`), commits, pushes `main`,
-and pushes the tag `extension-v<version>`. CI takes it from there.
+`manifest-chromium.json`, `manifest-firefox.json`), commits and pushes `main`.
+CI never bumps versions.
 
-`canvas-release.sh` without `--apps` does the same for every app whose code
-moved. CI never tags on its own.
+`.github/workflows/release.yml` runs on every push to `main`; when the version
+has no `v<version>` Release yet it:
 
-The `extension` job in `.github/workflows/release.yml` then:
-
-1. **Asserts** the tag matches `package.json` *and* both manifests. All three
-   must agree or the job fails — this is why you bump with the script rather
-   than editing `package.json` by hand.
+1. **Asserts** `package.json` *and* both manifests agree — this is why you
+   bump with the script rather than editing `package.json` by hand.
 2. **Builds** on a clean runner with a frozen lockfile.
 3. **Validates** both zips with `unzip -t` and writes `SHA256SUMS`.
-4. **Attaches** `canvas-extension-chromium.zip` and
-   `canvas-extension-firefox.zip` to the GitHub Release for the tag.
+4. **Creates** the `v<version>` GitHub Release with
+   `canvas-extension-chromium.zip`, `canvas-extension-firefox.zip` and
+   `SHA256SUMS`.
 
-Until recently this was built on a maintainer's laptop and uploaded with
-`gh release create`. It builds in CI now, so the artifact users install is
-reproducible from a known commit.
+Releases up to 3.2.0 were cut from the monorepo (`extension-v*` tags on
+canvas-ui/canvas-common).
 
 Watch it: `gh run list --workflow=release.yml --limit 1`
 
@@ -89,8 +80,8 @@ ships" behaviour while removing the manual upload.
 ## Versions
 
 The version lives in three files that must always agree: `package.json`,
-`manifest-chromium.json`, `manifest-firefox.json`. `npm run release:extension
--- --bump <level>` keeps them in sync; CI enforces it.
+`manifest-chromium.json`, `manifest-firefox.json`. `pnpm run release <level>`
+keeps them in sync; CI enforces it.
 
 Note the stores have their own rules — Chrome will reject an upload whose
 manifest version isn't strictly greater than the published one, so a version
@@ -98,9 +89,9 @@ you skipped is simply skipped, never reused.
 
 ## Rollback
 
-- **GitHub**: mark the release as a pre-release to bury it, or delete the tag
-  if nothing consumed it:
-  `git tag -d extension-v3.0.1 && git push origin :refs/tags/extension-v3.0.1`
+- **GitHub**: mark the release as a pre-release to bury it, or delete the
+  release and its tag if nothing consumed it:
+  `gh release delete v3.2.1 --cleanup-tag`
 - **Stores**: you cannot pull a version once approved. Roll forward — bump,
   release, submit again. In an emergency, unpublish the listing from the
   dashboard; this removes it for new users but leaves existing installs on the

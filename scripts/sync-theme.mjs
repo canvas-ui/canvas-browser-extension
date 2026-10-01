@@ -51,6 +51,8 @@ const OUTPUT = path.join(repoRoot, 'src', 'theme', 'theme.css')
  */
 const SOURCE_CANDIDATES = [
   process.env.CANVAS_THEME_SRC,
+  // canvas-web checked out next to this repo (~/Code/canvas/canvas-web)
+  path.join(repoRoot, '..', 'canvas-web', 'src', 'theme', 'css'),
   path.join(repoRoot, '..', '..', 'src', 'ui', 'web', 'src', 'theme', 'css'),
 ].filter(Boolean)
 
