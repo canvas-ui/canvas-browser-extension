@@ -2,8 +2,7 @@
 /**
  * Vendor the canvas-web design-token layer into this repo.
  *
- * The token layer lives in the canvas-web repo (src/ui/web/src/theme/), which
- * is a *different* git submodule of canvas-server. This one cannot @import
+ * The token layer lives in the canvas-web repo (src/theme/css/). This one cannot @import
  * across that boundary and still be cloneable on its own for store packaging,
  * so the tokens are vendored: this script generates src/theme/theme.css and
  * that file is committed.
@@ -25,11 +24,8 @@
  * those blocks into real `:root` blocks and strips the constructs that only
  * mean something to Tailwind.
  *
- * ── When the pnpm monorepo lands ────────────────────────────────────────────
- *
- * Delete this script and src/theme/theme.css. The theme layer becomes a
- * workspace package that both the web app and this extension depend on, and
- * src/popup/popup.css @imports it from node_modules instead.
+ * If the theme layer becomes a published canvas-common package, both clients
+ * can consume it directly and retire this generator.
  */
 
 import { createHash } from 'node:crypto'
@@ -45,15 +41,12 @@ const OUTPUT = path.join(repoRoot, 'src', 'theme', 'theme.css')
 /**
  * Where the source layer lives.
  *
- * The relative path is where canvas-web sits when this repo is checked out as
- * a submodule of canvas-server — the only place both halves exist at once.
- * Anywhere else, point CANVAS_THEME_SRC at a checkout.
+ * Prefer a sibling canvas-web checkout; otherwise set CANVAS_THEME_SRC.
  */
 const SOURCE_CANDIDATES = [
   process.env.CANVAS_THEME_SRC,
   // canvas-web checked out next to this repo (~/Code/canvas/canvas-web)
   path.join(repoRoot, '..', 'canvas-web', 'src', 'theme', 'css'),
-  path.join(repoRoot, '..', '..', 'src', 'ui', 'web', 'src', 'theme', 'css'),
 ].filter(Boolean)
 
 function resolveSource() {
@@ -62,8 +55,7 @@ function resolveSource() {
   }
   console.error('Could not find the canvas-web theme layer. Looked in:')
   for (const candidate of SOURCE_CANDIDATES) console.error(`  ${path.resolve(candidate)}`)
-  console.error('\nEither run this from inside a canvas-server checkout with the')
-  console.error('src/ui/web submodule initialised, or set CANVAS_THEME_SRC to a')
+  console.error('\nUse a sibling canvas-web checkout, or set CANVAS_THEME_SRC to a')
   console.error('canvas-web checkout, e.g.')
   console.error('  CANVAS_THEME_SRC=/path/to/canvas-web/src/theme/css npm run sync:theme')
   process.exit(1)
@@ -215,7 +207,7 @@ function generate(sourceDir) {
  * source's index.css and is load-bearing: every selector here has specificity
  * (0,1,0), so order alone decides whether a theme or a density value wins.
  *
- * When the pnpm monorepo migration lands, this file and its generator go away
+ * If the theme layer becomes a published shared package, retire this generator
  * in favour of a workspace package shared with the web app.
  */
 

@@ -3,8 +3,7 @@
  *
  * Port of canvas-web's src/theme/registry.ts. The storage key and the stored
  * JSON shape are deliberately identical to the web app's: this costs nothing
- * today, and when the pnpm monorepo turns the theme layer into a shared
- * package, adopting it is a delete rather than a data migration.
+ * when adopting a published shared theme package in the future.
  *
  * A theme is registered here and defined in ./theme.css (generated from
  * canvas-web — see scripts/sync-theme.mjs). Nothing else in the extension

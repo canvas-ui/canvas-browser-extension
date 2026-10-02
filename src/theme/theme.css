@@ -5,8 +5,8 @@
  *   npm run sync:theme
  *
  * source      canvas-web src/theme/css
- * synced-from 26134c6
- * source-hash 2bb82847bf68167f
+ * synced-from 163946e7
+ * source-hash 5ff5c2ff1324dd21
  * files       20
  *
  * Tailwind's @theme / @utility / @custom-variant constructs have been unwrapped
@@ -15,7 +15,7 @@
  * source's index.css and is load-bearing: every selector here has specificity
  * (0,1,0), so order alone decides whether a theme or a density value wins.
  *
- * When the pnpm monorepo migration lands, this file and its generator go away
+ * If the theme layer becomes a published shared package, retire this generator
  * in favour of a workspace package shared with the web app.
  */
 
@@ -1296,6 +1296,17 @@
 [data-theme='halflife'] [data-shell='rail'] .bg-accent {
   color: #fb7e14;
   color: oklch(0.724 0.181 52);
+}
+
+/* Folder tiles/chips use lambda orange on hover. Override even a custom
+   orange icon colour so the open folder remains legible on that surface. */
+[data-theme='halflife'] .folder-surface:is(:hover, :focus-visible, .bg-accent) {
+  background-color: var(--accent);
+  color: var(--accent-foreground);
+}
+[data-theme='halflife'] .folder-surface:is(:hover, :focus-visible, .bg-accent) svg,
+[data-theme='halflife'] .folder-surface:is(:hover, :focus-visible, .bg-accent) .text-muted-foreground {
+  color: var(--accent-foreground) !important;
 }
 
 /* ═══ density.css ═════════════════════════════════════════════════════════ */
