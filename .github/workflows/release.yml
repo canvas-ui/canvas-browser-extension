@@ -57,6 +57,6 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           VER: ${{ steps.v.outputs.version }}
         run: |
-          gh release create "v$VER" --target "$GITHUB_SHA" --title "canvas-browser-extension v$VER" \
+          gh release create "v$VER" --latest --target "$GITHUB_SHA" --title "canvas-browser-extension v$VER" \
             --notes "Chromium (Chrome, Edge, Brave, Opera) and Firefox packages. Store submissions are a separate, manually approved step — these zips are the exact artifacts uploaded there." \
             packages/canvas-extension-chromium.zip packages/canvas-extension-firefox.zip packages/SHA256SUMS
