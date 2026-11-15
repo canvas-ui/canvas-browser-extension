@@ -1429,6 +1429,13 @@ function getUnsyncedTabIdsForWindow(windowId) {
     .map(tab => tab.id);
 }
 
+// Sync To can file already-synced tabs into additional paths, so when synced
+// tabs are shown they count as targets too.
+function getSyncToTabIdsForWindow(windowId) {
+  if (!showingSyncedTabs) return getUnsyncedTabIdsForWindow(windowId);
+  return allBrowserTabs.filter(tab => tab.windowId === windowId).map(tab => tab.id);
+}
+
 function renderBrowserTabs() {
   console.log('Rendering browser tabs, count:', browserTabs.length);
 
@@ -1492,7 +1499,7 @@ function renderBrowserTabs() {
       title: 'Sync window tabs to specific paths...'
     });
     syncToWindowBtn.appendChild(createSvgIcon(ICON.syncTo, 12));
-    syncToWindowBtn.disabled = !canSync;
+    syncToWindowBtn.disabled = !currentConnection.connected || getSyncToTabIdsForWindow(windowId).length === 0;
 
     const syncCloseWindowBtn = createSecureElement('button', {
       className: 'action-btn icon-btn small warning',
@@ -1610,10 +1617,9 @@ function renderBrowserTabs() {
         className: 'action-btn icon-btn small primary',
         'data-action': 'sync-to',
         'data-tab-id': tab.id,
-        title: 'Sync to specific paths...'
+        title: isSynced ? 'Add to more paths...' : 'Sync to specific paths...'
       });
       syncToButton.appendChild(createSvgIcon(ICON.syncTo, 12));
-      if (isSynced) syncToButton.disabled = true;
 
       // Close button
       const closeButton = createSecureElement('button', {
@@ -3456,7 +3462,7 @@ function handleBrowserTabAction(event) {
       if (action === 'close-window') {
         handleCloseWindow(windowId);
       } else if (action === 'sync-to-window') {
-        const tabIds = getUnsyncedTabIdsForWindow(windowId);
+        const tabIds = getSyncToTabIdsForWindow(windowId);
         if (tabIds.length > 0) openSyncToPanel(tabIds);
       } else {
         handleSyncWindow(windowId, action === 'sync-close-window');
@@ -4406,7 +4412,7 @@ function startSessionInfoPolling() {
 // ===================================
 
 function handleSyncToAll() {
-  const tabIds = browserTabs.filter(t => !syncedTabIds.has(t.id)).map(t => t.id);
+  const tabIds = (showingSyncedTabs ? browserTabs : browserTabs.filter(t => !syncedTabIds.has(t.id))).map(t => t.id);
   if (tabIds.length > 0) openSyncToPanel(tabIds);
 }
 
@@ -4418,8 +4424,9 @@ function handleSyncToSelected() {
 async function openSyncToPanel(tabIds) {
   syncToPendingTabIds = tabIds;
   syncToSelectedPaths.clear();
-  // Pre-select the current bound path so a plain Sync works out of the box.
-  syncToSelectedPaths.add(getCurrentBoundPath());
+  // Pre-select the current bound path so a plain Sync works out of the box,
+  // unless every tab is already there and only additional paths make sense.
+  if (!tabIds.every(id => syncedTabIds.has(id))) syncToSelectedPaths.add(getCurrentBoundPath());
   updateSyncToConfirmBtn();
 
   try {
