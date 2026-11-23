@@ -687,6 +687,36 @@ windowsAPI.onRemoved.addListener(async (windowId) => {
 
 console.log('✅ Service Worker: All tab and window event listeners registered successfully');
 
+// Firefox supplies click modifiers when there is no default action popup.
+if (!runtimeAPI.getManifest().action.default_popup) {
+  actionAPI.onClicked.addListener((tab, click) => {
+    if (click?.button === 1) return;
+    if (click?.modifiers.includes('Shift')) {
+      void syncToolbarTab(tab);
+    } else {
+      void openToolbarPopup(tab).catch(error => console.error('Failed to open Canvas popup:', error));
+    }
+  });
+}
+
+async function openToolbarPopup({ id: tabId, windowId }) {
+  try {
+    // Send both calls in order within the click's user gesture.
+    await Promise.all([
+      actionAPI.setPopup({ tabId, popup: '/popup/popup.html' }),
+      actionAPI.openPopup({ windowId })
+    ]);
+  } finally {
+    await actionAPI.setPopup({ tabId, popup: null });
+  }
+}
+
+async function syncToolbarTab(tab) {
+  const result = await handleSyncTab({ tab });
+  const message = result.success ? 'Synced current page to Canvas' : `Sync failed: ${result.error}`;
+  broadcastToast(message, result.success ? 'success' : 'error', { osFallback: true });
+}
+
 // Message handling for popup/settings communication
 runtimeAPI.onMessage.addListener((message, sender, sendResponse) => {
   console.log('Message received:', message.type, message);
@@ -838,7 +868,7 @@ runtimeAPI.onMessage.addListener((message, sender, sendResponse) => {
 
   case 'SYNC_TAB':
     // Sync a single tab to Canvas
-    run(handleSyncTab(message.data, respond));
+    run(handleSyncTab(message.data).then(respond));
     return true;
 
   case 'SYNC_MULTIPLE_TABS':
@@ -2315,7 +2345,7 @@ function normalizeCanvasFetchOffset(value) {
   return Math.max(0, Math.floor(offset));
 }
 
-async function handleSyncTab(data, sendResponse) {
+async function handleSyncTab(data) {
   try {
     const { tab, contextId, contextSpec } = data;
 
@@ -2326,7 +2356,7 @@ async function handleSyncTab(data, sendResponse) {
     console.log('Syncing tab to Canvas:', tab);
 
     if (!tabManager.isActiveSyncCandidate(tab)) {
-      throw new Error('Hidden or discarded tabs are not active sync candidates');
+      throw new Error('This tab cannot be synced');
     }
 
     const mode = await browserStorage.getSyncMode();
@@ -2376,13 +2406,13 @@ async function handleSyncTab(data, sendResponse) {
     }
 
     console.log('Tab sync result:', result);
-    sendResponse(result);
+    return result;
   } catch (error) {
     console.error('Failed to sync tab:', error);
-    sendResponse({
+    return {
       success: false,
       error: error.message
-    });
+    };
   }
 }
 

@@ -484,7 +484,7 @@ function setupEventListeners() {
 
   // Ad-hoc "send current page": left-click opens the Sync To tree for the active
   // tab, then drives the confirm once a path is picked; right-click cancels.
-  addPageBtn.addEventListener('click', () => void handleAddPageClick());
+  addPageBtn.addEventListener('click', (event) => void handleAddPageClick(event));
   addPageBtn.addEventListener('contextmenu', (e) => {
     e.preventDefault();
     if (syncToOverlay.classList.contains('open')) closeSyncToPanel();
@@ -3280,16 +3280,10 @@ function updateBulkActionVisibility() {
 }
 
 // Tab action handlers (now called via event delegation)
-async function handleSyncTab(tabId, shouldCloseAfterSync = false) {
+async function handleSyncTab(tab, shouldCloseAfterSync = false) {
   try {
+    const tabId = tab.id;
     console.log('Syncing tab:', tabId, shouldCloseAfterSync ? '(will close after sync)' : '');
-
-    // Find the tab
-    const tab = browserTabs.find(t => t.id === tabId);
-    if (!tab) {
-      console.error('Tab not found:', tabId);
-      return;
-    }
 
     const response = await sendMessageToBackground('SYNC_TAB', { tab });
     console.log('Sync tab response:', response);
@@ -3483,7 +3477,8 @@ function handleBrowserTabAction(event) {
     case 'sync': {
       console.log('Calling handleSyncTab with tabId:', tabId);
       const shouldCloseAfterSync = event.ctrlKey || event.metaKey;
-      handleSyncTab(tabId, shouldCloseAfterSync);
+      const tab = browserTabs.find(t => t.id === tabId);
+      if (tab) handleSyncTab(tab, shouldCloseAfterSync);
       break;
     }
     case 'sync-to':
@@ -4459,8 +4454,8 @@ async function openSyncToPanel(tabIds) {
 // Header "+" click: when the panel is closed, grab the active tab and open the
 // Sync To tree for it; when it's open with a selection, this button IS the Sync
 // action (the overlay has no footer confirm button).
-async function handleAddPageClick() {
-  if (syncToOverlay.classList.contains('open')) {
+async function handleAddPageClick(event) {
+  if (!event.shiftKey && syncToOverlay.classList.contains('open')) {
     if (syncToSelectedPaths.size > 0) await handleSyncToConfirm();
     return;
   }
@@ -4469,7 +4464,11 @@ async function handleAddPageClick() {
     showToast('No active tab to send', 'error');
     return;
   }
-  openSyncToPanel([activeTab.id]);
+  if (event.shiftKey) {
+    await handleSyncTab(activeTab);
+    return;
+  }
+  await openSyncToPanel([activeTab.id]);
 }
 
 function closeSyncToPanel() {
